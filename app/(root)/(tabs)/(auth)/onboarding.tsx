@@ -6,7 +6,7 @@ const onboarding = () => {
   return (
     <View style={{flex:1, backgroundColor: 'white'}}>
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'white' }}>
-              <Text style={{ color: 'black', fontSize: 13, position: 'absolute', textAlign: 'center', bottom: '40%' }}><Text style={{fontWeight: 'bold', color: '#7f6edb', fontSize: 23, margin: 2}}>Hi!. I'm Pandyy</Text>{"\n\n"}Your learning buddy. Learn the easy way.</Text>
+              <Text style={{ color: 'black', fontSize: 13, position: 'absolute', textAlign: 'center', bottom: '40%' }}><Text style={{fontWeight: 'bold', color: '#7f6edb', fontSize: 23, margin: 2}}>Hi!. I'm Pandy</Text>{"\n\n"}Your learning buddy. Learn the easy way.</Text>
               <View
                   style={{
                       width: 350,

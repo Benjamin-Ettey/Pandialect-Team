@@ -112,6 +112,10 @@ const _layout = () => {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="englishPages"
+        options={{ headerShown: false }}
+      />
       
       
     </Stack> 

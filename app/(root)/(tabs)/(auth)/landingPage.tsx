@@ -35,7 +35,7 @@ const landingPage = () => {
           top: '35%',
           margin: 10
         }}>
-          Pandylingo!
+          Pandailect!
         </Text>
         <Text
           style={{

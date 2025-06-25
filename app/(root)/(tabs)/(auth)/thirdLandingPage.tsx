@@ -1,6 +1,7 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { FlatList, Image, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View, Modal } from 'react-native';
+import { FlatList, Image, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 
 const LANGUAGES = [
   'English',
@@ -22,6 +23,16 @@ const FLAGS: Record<string, string> = {
   Japanese: '🇯🇵',
 };
 
+const LANGUAGE_ROUTES: Record<string, string> = {
+  English: '/(root)/(tabs)/englishPages/englishLevel',
+  Spanish: '/(root)/(tabs)/(auth)/spanishLandingPage',
+  French: '/(root)/(tabs)/(auth)/frenchLandingPage',
+  German: '/(root)/(tabs)/(auth)/germanLandingPage',
+  Italian: '/(root)/(tabs)/(auth)/italianLandingPage',
+  Chinese: '/(root)/(tabs)/(auth)/chineseLandingPage',
+  Japanese: '/(root)/(tabs)/(auth)/japaneseLandingPage',
+};
+
 const ThirdLandingPage = () => {
   const [selected, setSelected] = useState<string | null>(null);
   const { width } = useWindowDimensions();
@@ -41,7 +52,13 @@ const ThirdLandingPage = () => {
         },
         selected === lang && styles.selectedLangButton,
       ]}
-      onPress={() => setSelected(lang)}
+      onPress={() => {
+        setSelected(lang);
+        const route = LANGUAGE_ROUTES[lang];
+        if (route) {
+          router.push(route);
+        }
+      }}
       activeOpacity={0.7}
     >
       <Text
@@ -61,15 +78,36 @@ const ThirdLandingPage = () => {
 
   return (
     <View style={styles.container}>
-      <View style={{ width: '40%', height: '7%',top:'0%', position: 'absolute' }}>
+      {/* Custom Back Button */}
+      <TouchableOpacity
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 24,
+          zIndex: 10,
+          backgroundColor: '#fff',
+          borderRadius: 20,
+          padding: 4,
+          elevation: 3,
+          shadowColor: '#7f6edb',
+          shadowOpacity: 0.12,
+          shadowRadius: 6,
+        }}
+        onPress={() => router.back()}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="arrow-back" size={28} color="#7f6edb" />
+      </TouchableOpacity>
+
+      <View style={{ width: '40%', height: '7%', top: '0%', position: 'absolute' }}>
         <Image
-        source={require('../../../../assets/images/pandaYes.png')}
-        style={{width: '100%', height: '100%'}}
-        resizeMode='contain'
+          source={require('../../../../assets/images/pandaYes.png')}
+          style={{ width: '100%', height: '100%' }}
+          resizeMode='contain'
         />
       </View>
-      
-      <Text style={[styles.header, { fontSize: Math.max(20, width * 0.03) , top: '5%', marginBottom: '10%'}]}>
+
+      <Text style={[styles.header, { fontSize: Math.max(20, width * 0.03), top: '5%', marginBottom: '10%' }]}>
         Which language do you prefer?
       </Text>
       <FlatList
@@ -80,26 +118,6 @@ const ThirdLandingPage = () => {
         showsVerticalScrollIndicator={false}
         style={{ width: '100%' }}
       />
-      <TouchableOpacity
-        style={[
-          styles.nextButton,
-          {
-            width: width * 0.9,
-            borderRadius: width * 0.2,
-            paddingVertical: buttonPadding + 4,
-            marginBottom: 50, // Added space below the button
-            bottom: '5%'
-          },
-          !selected && { backgroundColor: '#ccc' },
-        ]}
-        onPress={() => router.push('/(root)/(tabs)/(auth)/fourthLandingPage')}
-        disabled={!selected}
-        activeOpacity={0.7}
-      >
-        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: buttonFontSize }}>
-          Next
-        </Text>
-      </TouchableOpacity>
     </View>
   );
 };

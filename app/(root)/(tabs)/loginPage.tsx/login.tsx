@@ -4,9 +4,9 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 
 const SOCIALS = [
-  { name: 'Google', key: 'google', api: 'https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg' },
+  { name: 'Google', key: 'google', api: 'https://img.icons8.com/color/48/000000/google-logo.png' },
   { name: 'Facebook', key: 'facebook', api: 'https://upload.wikimedia.org/wikipedia/commons/0/05/Facebook_Logo_%282019%29.png' },
-  { name: 'Apple', key: 'apple', api: 'https://upload.wikimedia.org/wikipedia/commons/f/fa/Apple_logo_black.svg' },
+  { name: 'Apple', key: 'apple', api: 'https://img.icons8.com/ios-filled/50/000000/mac-os.png' },
 ];
 
 const login = () => {

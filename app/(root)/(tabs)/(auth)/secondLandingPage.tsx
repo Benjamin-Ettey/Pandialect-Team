@@ -45,7 +45,7 @@ const secondLandingPage = () => {
 
       <TouchableOpacity
         style={styles.curlButton}
-        onPress={() => router.push('/(root)/(tabs)/(auth)/thirdLandingPage')}
+        onPress={() => router.push('/(root)/(tabs)/englishPages/Known')}
         activeOpacity={0.7}
       >
         <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>Next</Text>
