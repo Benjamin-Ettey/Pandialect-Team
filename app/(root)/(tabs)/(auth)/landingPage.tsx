@@ -1,3 +1,4 @@
+import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
@@ -33,9 +34,10 @@ const landingPage = () => {
           fontSize: 28,
           textAlign: 'center',
           top: '35%',
-          margin: 10
+          margin: 10,
+          fontFamily:'Feather Bold',
         }}>
-          Pandailect!
+          Pandialect!
         </Text>
         <Text
           style={{
@@ -45,6 +47,7 @@ const landingPage = () => {
             marginTop: 16,
             width: '80%',
             top: '40%',
+            
           }}
         >
           Learning languages is now easier than ever.{"\n"} Get started with more exposure and less {"\n"}hassle. We’ll guide you through {"\n"}a quick 

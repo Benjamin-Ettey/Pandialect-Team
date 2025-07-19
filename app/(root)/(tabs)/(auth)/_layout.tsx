@@ -13,48 +13,28 @@ const _layout = () => {
       <Stack.Screen
         name="landingPage"
         options={{ 
-          headerShown: false
-          
-          
+          headerShown: false          
         }}
       />
 
       <Stack.Screen
         name="secondLandingPage"
         options={{
-          title: "",
-          headerTintColor: '#7f6edb',
-          headerStyle: {
-            backgroundColor: '#fff',
-          },
-          headerShadowVisible: false,
-          headerBackTitle: "."
+          headerShown: false
         }}
       />
 
     <Stack.Screen
         name="thirdLandingPage"
         options={{
-          title: "",
-          headerTintColor: '#7f6edb',
-          headerStyle: {
-            backgroundColor: '#fff',
-          },
-          headerShadowVisible: false,
-          headerBackTitle: ".."
+          headerShown: false
         }}
       />
 
       <Stack.Screen
         name="fourthLandingPage"
         options={{
-          title: "",
-          headerTintColor: '#7f6edb',
-          headerStyle: {
-            backgroundColor: '#fff',
-          },
-          headerShadowVisible: false,
-          headerBackTitle: "..."
+          headerShown: false
         }}
       />
 
@@ -78,15 +58,7 @@ const _layout = () => {
 
       <Stack.Screen
         name="createAccount"
-        options={{
-          title: "",
-          headerTintColor: '#7f6edb',
-          headerStyle: {
-            backgroundColor: '#fff',
-          },
-          headerShadowVisible: false,
-          headerBackTitle: "....."
-        }}
+        options={{ headerShown: false }}
       />
 
       <Stack.Screen
@@ -116,8 +88,10 @@ const _layout = () => {
         name="englishPages"
         options={{ headerShown: false }}
       />
-      
-      
+      <Stack.Screen
+      name="Known"
+      options={{headerShown: false}}
+      />
     </Stack> 
         
   )

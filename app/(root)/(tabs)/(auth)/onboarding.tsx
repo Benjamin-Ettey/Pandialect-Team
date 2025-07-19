@@ -88,7 +88,7 @@ const onboarding = () => {
                           height: 55,
 
                       }}
-                      onPress={() => router.push('/(root)/(tabs)/loginPage.tsx/login')}
+                      onPress={() => router.push('/(root)/(tabs)/loginPage/login')}
                   >
                       <Text style={{ color: '#7f6edb', fontWeight: 'bold', fontSize: 14 }}>I ALREADY HAVE AN ACCOUNT</Text>
                   </TouchableOpacity>

@@ -1,28 +1,12 @@
-import { View, Text } from 'react-native'
 import React from 'react'
 import { Stack } from 'expo-router'
 
 const _layout = () => {
   return (
     <Stack>
+      
       <Stack.Screen
-        name="englishbeginnerHomepage"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="beginnerCreateAccount"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="intermediateCreateAccount"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="advancedCreateAccount"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="beginnerClickedBottoms"
+        name="LanguageLessons"
         options={{
           title: "",
           headerTintColor: '#7f6edb',
@@ -32,6 +16,10 @@ const _layout = () => {
           headerShadowVisible: false,
           headerBackTitle: "."
         }}
+        />
+        <Stack.Screen
+        name= "HomepageTabs"
+        options = {{headerShown: false}}
         />
       
     </Stack>

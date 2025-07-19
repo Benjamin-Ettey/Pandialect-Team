@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import React from 'react'
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
@@ -6,12 +7,31 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 const secondLandingPage = () => {
   return (
     <View style={{ flex: 1, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' }}>
+      <TouchableOpacity
+        style={{
+          position: 'absolute',
+          top: '10%',
+          left: 24,
+          zIndex: 10,
+          backgroundColor: '#fff',
+          borderRadius: 20,
+          padding: 4,
+          elevation: 3,
+          shadowColor: '#7f6edb',
+          shadowOpacity: 0.12,
+          shadowRadius: 6,
+        }}
+        onPress={() => router.back()}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="arrow-back" size={28} color="#7f6edb" />
+      </TouchableOpacity>
       <Text style={{
         textAlign: 'center',
         marginTop: 16,
         width: '80%',
         fontSize: 19,
-        bottom: '15%'
+        bottom: '8%'
       }}>
         Just <Text style={{ fontWeight: 'bold', color:'#7f6edb' }}>some few questions</Text> {""}before we start your first lesson!
       </Text>
@@ -45,7 +65,7 @@ const secondLandingPage = () => {
 
       <TouchableOpacity
         style={styles.curlButton}
-        onPress={() => router.push('/(root)/(tabs)/englishPages/Known')}
+        onPress={() => router.push('/(root)/(tabs)/(auth)/Known')}
         activeOpacity={0.7}
       >
         <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>Next</Text>

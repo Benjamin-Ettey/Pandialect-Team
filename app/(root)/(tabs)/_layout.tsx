@@ -10,7 +10,7 @@ const _layout = () => {
                 options={{ headerShown: false }}
               />
       <Stack.Screen
-        name="loginPage.tsx"
+        name="loginPage"
         options={{
           title: "",
           headerTintColor: '#7f6edb',
@@ -65,7 +65,44 @@ const _layout = () => {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="SettingsContainer"
+        options={{
+          title: "",
+          headerTintColor: '#7f6edb',
+          headerStyle: {
+            backgroundColor: '#fff',
+          },
+          headerShadowVisible: false,
+          headerBackTitle: "."
+        }}
+      />
+      <Stack.Screen
+        name="TargetPractice"
+        options={{
+          title: "",
+          headerTintColor: '#7f6edb',
+          headerStyle: {
+            backgroundColor: '#edeafd',
+          },
+          headerShadowVisible: false,
+          headerBackTitle: "."
+        }}
+      />
       
+      <Stack.Screen
+        name="loginPage.tsx"
+        options={{
+          title: "",
+          headerTintColor: '#7f6edb',
+          headerStyle: {
+            backgroundColor: '#fff',
+          },
+          headerShadowVisible: false,
+          headerBackTitle: "."
+        }}
+      />
+
 
       
 

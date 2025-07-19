@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -19,41 +19,24 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
-const SOCIAL_LOGINS = [
-  { id: 'google', icon: require('../../../../assets/images/google.png') },
-];
-
-const SignUpScreen = () => {
+const LoginScreen = () => {
   const router = useRouter();
-  const params = useLocalSearchParams();
-  const { language, level } = params;
-
-  // Form state
   const [formData, setFormData] = useState({
-    name: '',
     email: '',
     password: '',
-    age: ''
   });
   const [errors, setErrors] = useState({
-    name: '',
     email: '',
     password: '',
-    age: ''
   });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
-  // Validation functions
   const validateField = (field: string, value: string) => {
     let error = '';
 
     switch (field) {
-      case 'name':
-        if (!value.trim()) error = 'Full name is required';
-        else if (value.length < 3) error = 'Name too short';
-        break;
       case 'email':
         if (!value.includes('@') || !value.includes('.')) {
           error = 'Please enter a valid email';
@@ -63,11 +46,6 @@ const SignUpScreen = () => {
         if (value.length < 8) error = 'Minimum 8 characters';
         else if (!/[A-Z]/.test(value)) error = 'Needs 1 uppercase letter';
         else if (!/\d/.test(value)) error = 'Needs 1 number';
-        break;
-      case 'age':
-        if (!value) error = 'Age is required';
-        else if (isNaN(Number(value))) error = 'Must be a number';
-        else if (Number(value) < 13) error = 'Must be 13+';
         break;
     }
 
@@ -81,92 +59,52 @@ const SignUpScreen = () => {
         ['accessToken', accessToken],
         ['refreshToken', refreshToken],
       ]);
+      if (rememberMe) {
+        await AsyncStorage.setItem('rememberMe', 'true');
+      }
     } catch (error) {
       console.error('Error storing tokens:', error);
     }
   };
 
-  const handleSubmit = async () => {
-    // Validate all fields
-    const isNameValid = validateField('name', formData.name);
+  const handleLogin = async () => {
     const isEmailValid = validateField('email', formData.email);
     const isPasswordValid = validateField('password', formData.password);
-    const isAgeValid = validateField('age', formData.age);
 
-    if (!termsAccepted) {
-      Alert.alert('Error', 'Please accept the terms and conditions');
-      return;
-    }
-
-    if (isNameValid && isEmailValid && isPasswordValid && isAgeValid) {
+    if (isEmailValid && isPasswordValid) {
       setLoading(true);
       try {
         // Replace this with your actual API call
-        const response = await fetch('YOUR_SIGNUP_API_ENDPOINT_HERE', {
+        const response = await fetch('YOUR_API_ENDPOINT_HERE', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            name: formData.name,
             email: formData.email,
             password: formData.password,
-            age: formData.age,
-            language,
-            level
           }),
         });
 
         const data = await response.json();
 
         if (response.ok) {
-          // Start a login process on successful signup
-          try {
-            // Replace this with your actual API call
-            const response = await fetch('YOUR_API_ENDPOINT_HERE', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                email: formData.email,
-                password: formData.password,
-              }),
-            });
-          
-            const data = await response.json();
-          
-            if (response.ok) {
-              // Login successful
-              // Store tokens in AsyncStorage on successful login
-              await storeTokens(data.accessToken, data.refreshToken);
-          
-              // Navigate to home page next
-              router.replace('/(root)/(tabs)/englishPages/beginner/HomepageTabs/home');
-            } else {
-              // Login Failed. Even though registration was successful
-              Alert.alert('Error', data.message || 'Login failed. Please log in manually');
-            }
-        } catch (error) {
-          // Login failed
-          console.error('Login error:', error);
-          Alert.alert('Error', 'An unexpected error occurred. Please try again.');
-        } finally {
-          setLoading(false);
+          // Store tokens in AsyncStorage
+          await storeTokens(data.accessToken, data.refreshToken);
+
+          // Navigate to home page on successful login
+          router.replace('/(root)/(tabs)/englishPages/beginner/HomepageTabs/home');
+        } else {
+          Alert.alert('Error', data.message || 'Login failed. Please try again.');
         }
-      } else {
-        // Registration was not successful
-        Alert.alert('Error', data.message || 'Sign up failed. Please try again.');
+      } catch (error) {
+        console.error('Login error:', error);
+        Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-        // Registration error
-      console.error('Sign up error:', error);
-      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
-    } finally {
-      setLoading(false);
     }
-  }
-};
+  };
 
   return (
     <KeyboardAvoidingView
@@ -177,65 +115,20 @@ const SignUpScreen = () => {
         contentContainerStyle={styles.scrollContainer}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Header */}
+        {/* Header with Panda */}
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="arrow-back" size={24} color="#7f6edb" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Create Account</Text>
-          <View style={{ width: 24 }} /> {/* Spacer */}
-        </View>
-
-        {/* Language/Level Indicator */}
-        <View style={styles.languageInfo}>
-          <Text style={styles.languageText}>
-            Learning: <Text style={styles.highlight}>{language || ''}</Text>
-          </Text>
-          <Text style={styles.languageText}>
-            Level: <Text style={styles.highlight}>{level || ''}</Text>
-          </Text>
+          <View style={styles.logoContainer}>
+            <Image
+              source={require('../../../../assets/images/pandaCup.png')}
+              style={styles.logoImage}
+              resizeMode='contain'
+            />
+          </View>
+          <Text style={styles.title}>Sign In</Text>
         </View>
 
         {/* Form */}
         <View style={styles.formContainer}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Full Name</Text>
-            <View style={styles.inputContainer}>
-              <Ionicons name="person-outline" size={20} color="#888" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                value={formData.name}
-                onChangeText={(text) => {
-                  setFormData({ ...formData, name: text });
-                  if (errors.name) validateField('name', text);
-                }}
-                onBlur={() => validateField('name', formData.name)}
-              />
-            </View>
-            {errors.name ? <Text style={styles.error}>{errors.name}</Text> : null}
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Age</Text>
-            <View style={styles.inputContainer}>
-              <Ionicons name="calendar-outline" size={20} color="#888" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                value={formData.age}
-                onChangeText={(text) => {
-                  setFormData({ ...formData, age: text });
-                  if (errors.age) validateField('age', text);
-                }}
-                onBlur={() => validateField('age', formData.age)}
-              />
-            </View>
-            {errors.age ? <Text style={styles.error}>{errors.age}</Text> : null}
-          </View>
-
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Email Address</Text>
             <View style={styles.inputContainer}>
@@ -287,68 +180,65 @@ const SignUpScreen = () => {
             )}
           </View>
 
-          {/* Terms Checkbox */}
-          <View style={styles.termsContainer}>
+          {/* Remember Me & Forgot Password */}
+          <View style={styles.rememberContainer}>
             <TouchableOpacity
-              style={styles.checkbox}
-              onPress={() => setTermsAccepted(!termsAccepted)}
+              style={styles.checkboxContainer}
+              onPress={() => setRememberMe(!rememberMe)}
             >
-              {termsAccepted ? (
+              {rememberMe ? (
                 <Ionicons name="checkbox" size={24} color="#7f6edb" />
               ) : (
                 <Ionicons name="square-outline" size={24} color="#888" />
               )}
+              <Text style={styles.rememberText}>Remember me</Text>
             </TouchableOpacity>
-            <Text style={styles.termsText}>
-              I agree to the <Text style={styles.link}>Terms</Text> and <Text style={styles.link}>Privacy Policy</Text>
-            </Text>
+            <TouchableOpacity onPress={() => router.push('/(root)/(tabs)/forgotPassword/forgotpassword')}>
+              <Text style={styles.forgotPassword}>Forgot Password?</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Submit Button */}
+          {/* Login Button */}
           <TouchableOpacity
             style={[
-              styles.submitButton,
-              (!formData.name || !formData.email || !formData.password || !formData.age || !termsAccepted) &&
+              styles.loginButton,
+              (!formData.email || !formData.password || errors.email || errors.password) &&
               styles.disabledButton
             ]}
-            onPress={handleSubmit}
-            disabled={!formData.name || !formData.email || !formData.password || !formData.age || !termsAccepted || loading}
+            onPress={handleLogin}
+            disabled={!formData.email || !formData.password || errors.email || errors.password || loading}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.submitButtonText}>Create Account</Text>
+              <Text style={styles.loginButtonText}>Sign In</Text>
             )}
           </TouchableOpacity>
 
           {/* Divider */}
           <View style={styles.dividerContainer}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or continue with</Text>
+            <Text style={styles.dividerText}>or sign in with</Text>
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Social Logins */}
+          {/* Google Login */}
           <View style={styles.socialContainer}>
-            {SOCIAL_LOGINS.map((social) => (
-              <TouchableOpacity
-                key={social.id}
-                style={styles.socialButton}
-              >
+            <TouchableOpacity style={styles.googleButton}>
+              <View style={styles.googleIconContainer}>
                 <Image
-                  source={social.icon}
-                  style={styles.socialIcon}
-                  resizeMode="contain"
+                  source={require('../../../../assets/images/google.png')}
+                  style={styles.googleIcon}
                 />
-              </TouchableOpacity>
-            ))}
+              </View>
+            </TouchableOpacity>
           </View>
 
-          {/* Login Link */}
-          <View style={styles.loginContainer}>
-            <Text style={styles.loginText}>Already have an account? </Text>
-            <TouchableOpacity onPress={() => router.push('/(root)/(tabs)/loginPage/login')}>
-              <Text style={styles.loginLink}>Log in</Text>
+          {/* Sign Up Link */}
+          <View style={styles.signupContainer}>
+            <Text style={styles.signupText}>Don't have an account? </Text>
+            <TouchableOpacity onPress={() => router.push('/(root)/(tabs)/(auth)/secondLandingPage')}>
+              <Text style={styles.signupLink}>Sign up</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -364,42 +254,30 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     paddingBottom: 40,
-    top: '10%'
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 24,
+    paddingTop: 20,
+    paddingBottom: 20,
   },
-  backButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    elevation: 3,
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
+  logoContainer: {
+    width: 150,
+    height: 150,
+    backgroundColor: '#7f6edb',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 100,
+    marginBottom: 20,
+  },
+  logoImage: {
+    width: '80%',
+    height: '80%',
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#7f6edb',
-  },
-  languageInfo: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 20,
-    marginBottom: 24,
-  },
-  languageText: {
-    fontSize: 16,
-    color: '#666',
-  },
-  highlight: {
-    fontWeight: 'bold',
-    color: '#7f6edb',
+    marginBottom: 10,
   },
   formContainer: {
     paddingHorizontal: 24,
@@ -455,24 +333,27 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginLeft: 4,
   },
-  termsContainer: {
+  rememberContainer: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
     marginBottom: 24,
   },
-  checkbox: {
-    marginRight: 12,
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  termsText: {
+  rememberText: {
     fontSize: 15,
     color: '#666',
+    marginLeft: 8,
   },
-  link: {
+  forgotPassword: {
     color: '#7f6edb',
     fontWeight: '500',
+    fontSize: 15,
   },
-  submitButton: {
+  loginButton: {
     backgroundColor: '#7f6edb',
     borderRadius: 12,
     paddingVertical: 16,
@@ -483,12 +364,13 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 8,
     elevation: 6,
+    marginBottom: 20,
   },
   disabledButton: {
     backgroundColor: '#b6acf0',
     shadowOpacity: 0,
   },
-  submitButtonText: {
+  loginButtonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
@@ -496,7 +378,7 @@ const styles = StyleSheet.create({
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 24,
+    marginVertical: 20,
   },
   dividerLine: {
     flex: 1,
@@ -509,39 +391,50 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   socialContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 16,
+    width: '100%',
+    alignItems: 'center',
     marginBottom: 24,
   },
-  socialButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#f7f7f7',
-    alignItems: 'center',
+  googleButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f7f7f7',
     borderWidth: 1,
     borderColor: '#e5e5e5',
   },
-  socialIcon: {
-    width: 24,
-    height: 24,
+  googleIconContainer: {
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  loginContainer: {
+  googleIcon: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
+  },
+  googleText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+  },
+  signupContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     marginTop: 8,
   },
-  loginText: {
+  signupText: {
     color: '#666',
     fontSize: 15,
   },
-  loginLink: {
+  signupLink: {
     color: '#7f6edb',
     fontWeight: 'bold',
     fontSize: 15,
   },
 });
 
-export default SignUpScreen;
+export default LoginScreen;
