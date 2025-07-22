@@ -38,10 +38,6 @@ const WordBank = () => {
         // Replace with actual API call
         const fetchWords = async () => {
             try {
-                // const response = await fetch('your-backend-api/words');
-                // const data = await response.json();
-                // setWords(data);
-
                 // Mock data for demonstration
                 const mockWords = [
                     { id: '1', category: '1', word: 'Hello', translation: 'Hola', note: 'Formal greeting' },
@@ -71,18 +67,6 @@ const WordBank = () => {
         }
 
         try {
-            // Replace with actual API call
-            // const response = await fetch('your-backend-api/words', {
-            //   method: 'POST',
-            //   headers: { 'Content-Type': 'application/json' },
-            //   body: JSON.stringify({
-            //     category: selectedCategory.id,
-            //     word: newWord,
-            //     translation: newTranslation
-            //   })
-            // });
-            // const data = await response.json();
-
             // Mock response
             const newWordItem = {
                 id: Date.now().toString(),
@@ -103,9 +87,6 @@ const WordBank = () => {
 
     const handleDeleteWord = async (id) => {
         try {
-            // Replace with actual API call
-            // await fetch(`your-backend-api/words/${id}`, { method: 'DELETE' });
-
             setWords(words.filter(word => word.id !== id));
         } catch (error) {
             Alert.alert('Error', 'Failed to delete word');
@@ -114,17 +95,6 @@ const WordBank = () => {
 
     return (
         <View style={styles.container}>
-            {/* Header */}
-            {/* <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()}>
-                    <Ionicons name="arrow-back" size={24} color="#fff" />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Word Bank</Text>
-                <TouchableOpacity onPress={() => setIsModalVisible(true)}>
-                    <Ionicons name="add" size={28} color="#fff" />
-                </TouchableOpacity>
-            </View> */}
-
             {/* Search Bar */}
             <View style={styles.searchContainer}>
                 <Ionicons name="search" size={20} color="#777" style={styles.searchIcon} />
@@ -190,6 +160,14 @@ const WordBank = () => {
                     </View>
                 }
             />
+
+            {/* Floating Add Button */}
+            <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => setIsModalVisible(true)}
+            >
+                <Ionicons name="add" size={28} color="#fff" />
+            </TouchableOpacity>
 
             {/* Add Word Modal */}
             <Modal
@@ -257,7 +235,7 @@ const WordBank = () => {
                                 <Text style={styles.cancelButtonText}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={styles.addButton}
+                                style={styles.addButtonModal}
                                 onPress={handleAddWord}
                             >
                                 <Text style={styles.addButtonText}>Add Word</Text>
@@ -274,19 +252,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#f8f9fa',
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 16,
-        backgroundColor: '#7f6edb',
-        paddingTop: 50,
-    },
-    headerTitle: {
-        color: '#fff',
-        fontSize: 20,
-        fontWeight: 'bold',
     },
     searchContainer: {
         flexDirection: 'row',
@@ -394,6 +359,23 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#999',
     },
+    // Floating Add Button styles
+    addButton: {
+        position: 'absolute',
+        bottom: 30,
+        right: 30,
+        backgroundColor: '#7f6edb',
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        alignItems: 'center',
+        justifyContent: 'center',
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+    },
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',
@@ -478,7 +460,7 @@ const styles = StyleSheet.create({
         color: '#666',
         fontWeight: '600',
     },
-    addButton: {
+    addButtonModal: {
         flex: 1,
         backgroundColor: '#7f6edb',
         borderRadius: 10,
