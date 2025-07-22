@@ -1,42 +1,71 @@
-import React, { useState, useEffect } from 'react';
+import { FontAwesome, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Image,
-  FlatList,
   ActivityIndicator,
-  RefreshControl,
   Dimensions,
-  SafeAreaView
+  FlatList,
+  Image,
+  RefreshControl,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons, FontAwesome } from '@expo/vector-icons';
 
 const { width, height } = Dimensions.get('window');
 
-const LeaderboardScreen = () => {
-  const [currentUser] = useState({
-    id: 'user-123',
-    name: 'You',
-    avatar: 'https://randomuser.me/api/portraits/men/1.jpg',
-  });
+type LeaderboardUser = {
+  userId: string;
+  fullName: string;
+  avatarUrl: string;
+  xpPoints: number;
+  streak: number;
+  rank: number;
+  currentUser: boolean;
+};
 
-  const [activeTab, setActiveTab] = useState('weekly');
-  const [leaderboardData, setLeaderboardData] = useState([]);
+const LeaderboardScreen = () => {
+  const [activeTab, setActiveTab] = useState<'weekly' | 'monthly' | 'lifetime'>('weekly');
+  const [leaderboardData, setLeaderboardData] = useState<LeaderboardUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  const fetchLeaderboardData = async (timeframe) => {
+  useEffect(() => {
+    const getUserId = async () => {
+      const userId = await AsyncStorage.getItem('userId');
+      setCurrentUserId(userId);
+    };
+    getUserId();
+  }, []);
+
+  const fetchLeaderboardData = async (timeframe: string) => {
     try {
       setRefreshing(true);
-      const mockData = {
-        weekly: generateMockData('weekly', currentUser),
-        monthly: generateMockData('monthly', currentUser),
-        lifetime: generateMockData('lifetime', currentUser)
-      };
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setLeaderboardData(mockData[timeframe]);
+      setLoading(true);
+
+      const accessToken = await AsyncStorage.getItem('accessToken');
+      if (!accessToken) return;
+
+      const response = await fetch(
+        `http://localhost:8080/api/leaderboard?timeframe=${timeframe}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch leaderboard');
+      }
+
+      const data = await response.json();
+      setLeaderboardData(data);
     } catch (error) {
       console.error('Failed to fetch leaderboard:', error);
     } finally {
@@ -46,20 +75,21 @@ const LeaderboardScreen = () => {
   };
 
   useEffect(() => {
-    fetchLeaderboardData(activeTab);
-  }, [activeTab]);
+    if (currentUserId) {
+      fetchLeaderboardData(activeTab);
+    }
+  }, [activeTab, currentUserId]);
 
   const onRefresh = () => {
     fetchLeaderboardData(activeTab);
   };
 
-  const renderItem = ({ item, index }) => {
-    const isCurrentUser = item.id === currentUser.id;
+  const renderItem = ({ item, index }: { item: LeaderboardUser, index: number }) => {
     return (
       <LeaderboardItem
         item={item}
         index={index}
-        isCurrentUser={isCurrentUser}
+        isCurrentUser={item.currentUser}
       />
     );
   };
@@ -85,7 +115,7 @@ const LeaderboardScreen = () => {
                 styles.tabButton,
                 activeTab === tab && styles.activeTab
               ]}
-              onPress={() => setActiveTab(tab)}
+              onPress={() => setActiveTab(tab as any)}
             >
               <Text style={[
                 styles.tabText,
@@ -107,11 +137,16 @@ const LeaderboardScreen = () => {
             {topUsers[1] && (
               <View style={[styles.podiumItem, styles.secondPlace]}>
                 <View style={styles.podiumRank}>2</View>
-                <Image source={{ uri: topUsers[1].avatar }} style={styles.podiumAvatar} />
-                <Text style={styles.podiumName} numberOfLines={1}>{topUsers[1].name}</Text>
+                <Image
+                  source={{ uri: topUsers[1].avatarUrl || 'https://randomuser.me/api/portraits/men/1.jpg' }}
+                  style={styles.podiumAvatar}
+                />
+                <Text style={styles.podiumName} numberOfLines={1}>
+                  {topUsers[1].fullName}
+                </Text>
                 <View style={styles.podiumXp}>
                   <MaterialCommunityIcons name="star-four-points" size={14} color="#FFF" />
-                  <Text style={styles.podiumXpText}>{topUsers[1].xp.toLocaleString()}</Text>
+                  <Text style={styles.podiumXpText}>{topUsers[1].xpPoints.toLocaleString()}</Text>
                 </View>
               </View>
             )}
@@ -120,13 +155,18 @@ const LeaderboardScreen = () => {
             {topUsers[0] && (
               <View style={[styles.podiumItem, styles.firstPlace]}>
                 <View style={styles.crownContainer}>
-                  <Ionicons name="crown" size={24} color="#FFD700" />
+                  <MaterialCommunityIcons name="crown" size={24} color="#FFD700" />
                 </View>
-                <Image source={{ uri: topUsers[0].avatar }} style={styles.podiumAvatar} />
-                <Text style={styles.podiumName} numberOfLines={1}>{topUsers[0].name}</Text>
+                <Image
+                  source={{ uri: topUsers[0].avatarUrl || 'https://randomuser.me/api/portraits/men/1.jpg' }}
+                  style={styles.podiumAvatar}
+                />
+                <Text style={styles.podiumName} numberOfLines={1}>
+                  {topUsers[0].fullName}
+                </Text>
                 <View style={styles.podiumXp}>
                   <MaterialCommunityIcons name="star-four-points" size={14} color="#FFF" />
-                  <Text style={styles.podiumXpText}>{topUsers[0].xp.toLocaleString()}</Text>
+                  <Text style={styles.podiumXpText}>{topUsers[0].xpPoints.toLocaleString()}</Text>
                 </View>
               </View>
             )}
@@ -134,12 +174,17 @@ const LeaderboardScreen = () => {
             {/* 3rd place */}
             {topUsers[2] && (
               <View style={[styles.podiumItem, styles.thirdPlace]}>
-                <View style={styles.podiumRank}><Text>3</Text></View>
-                <Image source={{ uri: topUsers[2].avatar }} style={styles.podiumAvatar} />
-                <Text style={styles.podiumName} numberOfLines={1}>{topUsers[2].name}</Text>
+                <View style={styles.podiumRank}>3</View>
+                <Image
+                  source={{ uri: topUsers[2].avatarUrl || 'https://randomuser.me/api/portraits/men/1.jpg' }}
+                  style={styles.podiumAvatar}
+                />
+                <Text style={styles.podiumName} numberOfLines={1}>
+                  {topUsers[2].fullName}
+                </Text>
                 <View style={styles.podiumXp}>
                   <MaterialCommunityIcons name="star-four-points" size={14} color="#FFF" />
-                  <Text style={styles.podiumXpText}>{topUsers[2].xp.toLocaleString()}</Text>
+                  <Text style={styles.podiumXpText}>{topUsers[2].xpPoints.toLocaleString()}</Text>
                 </View>
               </View>
             )}
@@ -155,7 +200,7 @@ const LeaderboardScreen = () => {
           <FlatList
             data={leaderboardData.slice(3)} // Skip top 3 already shown in podium
             renderItem={renderItem}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item.userId}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -175,7 +220,7 @@ const LeaderboardScreen = () => {
   );
 };
 
-const LeaderboardItem = ({ item, index, isCurrentUser }) => {
+const LeaderboardItem = ({ item, isCurrentUser }: { item: LeaderboardUser, index: number, isCurrentUser: boolean }) => {
   return (
     <View style={[
       styles.itemContainer,
@@ -194,7 +239,7 @@ const LeaderboardItem = ({ item, index, isCurrentUser }) => {
       {/* Avatar */}
       <View style={styles.avatarContainer}>
         <Image
-          source={{ uri: item.avatar }}
+          source={{ uri: item.avatarUrl || 'https://randomuser.me/api/portraits/men/1.jpg' }}
           style={[styles.avatar, isCurrentUser && styles.currentUserAvatar]}
         />
       </View>
@@ -202,7 +247,7 @@ const LeaderboardItem = ({ item, index, isCurrentUser }) => {
       {/* User Info */}
       <View style={styles.userInfo}>
         <Text style={[styles.userName, isCurrentUser && styles.currentUserName]}>
-          {item.name} {isCurrentUser && '(You)'}
+          {item.fullName} {isCurrentUser && '(You)'}
         </Text>
         <View style={styles.stats}>
           <View style={styles.stat}>
@@ -215,7 +260,7 @@ const LeaderboardItem = ({ item, index, isCurrentUser }) => {
       {/* XP */}
       <View style={styles.xpContainer}>
         <MaterialCommunityIcons name="star-four-points" size={16} color="#7F5AED" />
-        <Text style={styles.xpText}>{item.xp.toLocaleString()}</Text>
+        <Text style={styles.xpText}>{item.xpPoints.toLocaleString()}</Text>
       </View>
     </View>
   );
@@ -227,62 +272,6 @@ const LeaderboardFooter = () => (
     <Text style={styles.footerText}>Keep going! You're doing great!</Text>
   </View>
 );
-
-const getRankColor = (rank) => {
-  switch (rank) {
-    case 1: return '#FFD700'; // Gold
-    case 2: return '#C0C0C0'; // Silver
-    case 3: return '#CD7F32'; // Bronze
-    default: return '#7F5AED'; // Purple
-  }
-};
-
-const generateMockData = (timeframe, currentUser) => {
-  const baseData = [
-    { id: '1', name: 'Alex Johnson', avatar: 'https://randomuser.me/api/portraits/men/32.jpg' },
-    { id: '2', name: 'Maria Garcia', avatar: 'https://randomuser.me/api/portraits/women/44.jpg' },
-    { id: '3', name: 'James Smith', avatar: 'https://randomuser.me/api/portraits/men/22.jpg' },
-    { id: '4', name: 'Sarah Williams', avatar: 'https://randomuser.me/api/portraits/women/33.jpg' },
-    { id: '5', name: 'John Brown', avatar: 'https://randomuser.me/api/portraits/men/55.jpg' },
-    { id: '6', name: 'Emma Wilson', avatar: 'https://randomuser.me/api/portraits/women/65.jpg' },
-    { id: '7', name: 'Michael Davis', avatar: 'https://randomuser.me/api/portraits/men/75.jpg' },
-  ];
-
-  if (!baseData.some(user => user.id === currentUser.id)) {
-    baseData.push(currentUser);
-  }
-
-  const usersWithData = baseData.map((user) => {
-    const isCurrentUser = user.id === currentUser.id;
-    let xp, streak;
-
-    switch (timeframe) {
-      case 'weekly':
-        xp = Math.floor(Math.random() * 3000) + 1000;
-        streak = Math.floor(Math.random() * 14) + 1;
-        break;
-      case 'monthly':
-        xp = Math.floor(Math.random() * 10000) + 5000;
-        streak = Math.floor(Math.random() * 30) + 1;
-        break;
-      case 'lifetime':
-        xp = Math.floor(Math.random() * 50000) + 10000;
-        streak = Math.floor(Math.random() * 365) + 1;
-        break;
-    }
-
-    if (isCurrentUser) {
-      xp = Math.floor(xp * 0.7);
-      streak = Math.floor(streak * 0.8);
-    }
-
-    return { ...user, xp, streak };
-  });
-
-  return usersWithData
-    .sort((a, b) => b.xp - a.xp)
-    .map((user, index) => ({ ...user, rank: index + 1 }));
-};
 
 const styles = StyleSheet.create({
   container: {

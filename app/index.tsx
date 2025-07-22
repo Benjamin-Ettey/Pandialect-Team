@@ -1,5 +1,5 @@
-import { Redirect } from "expo-router";
+import {Redirect} from "expo-router";
 
 export default function Index() {
-  return <Redirect href="/(root)/(tabs)/englishPages/beginner/HomepageTabs/review" />;
+    return <Redirect href="/(root)/(tabs)/loginPage/login"/>;
 }

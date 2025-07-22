@@ -7,7 +7,6 @@ import {
   Animated,
   Image,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,49 +15,57 @@ import {
   View
 } from 'react-native';
 
+type UserProfileData = {
+  name: string
+  email: string
+  avatarUrl: string | null
+  streak: number
+  totalXp: number
+  lessonsCompleted: number
+}
+
 const ProfileScreen = () => {
   const { width, height } = useWindowDimensions();
   const isSmallScreen = width < 375;
 
+  const placeHolderUser: UserProfileData = {
+    name: "John Doe",
+    email: "johndoe@email.com",
+    avatarUrl: null,
+    streak: 0,
+    totalXp: 0,
+    lessonsCompleted: 0
+  }
+
   // User data (would normally come from backend/context)
-  const [user, setUser] = useState({
-    name: 'Alex Johnson',
-    email: 'alex.johnson@example.com',
-    avatar: 'https://randomuser.me/api/portraits/men/32.jpg',
-    streak: 12,
-    xp: 1250,
-    level: 'Intermediate',
-    learning: [
-      {
-        language: 'Spanish',
-        flag: '🇪🇸',
-        progress: 65,
-        level: 'B1',
-        lessonsCompleted: 24,
-        wordsLearned: 180,
-        streak: 7
-      },
-      {
-        language: 'French',
-        flag: '🇫🇷',
-        progress: 42,
-        level: 'A2',
-        lessonsCompleted: 15,
-        wordsLearned: 120,
-        streak: 3
-      },
-    ],
-    stats: {
-      lessonsCompleted: 48,
-      wordsLearned: 320,
-      perfectDays: 7
-    }
-  });
+  const [user, setUser] = useState(placeHolderUser);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState(null);
   const [buttonScale] = useState(new Animated.Value(1));
+
+  const getUserProfile = async () => {
+    const url = 'http://localhost:8080/api/user/profile?userId=0d2cd587-2926-4992-9441-6bbb2e6cbe4b';
+    const options = {
+      method: 'GET',
+      headers: {
+        Authorization: 'Bearer eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOiIwZDJjZDU4Ny0yOTI2LTQ5OTItOTQ0MS02YmJiMmU2Y2JlNGIiLCJzdWIiOiIwZDJjZDU4Ny0yOTI2LTQ5OTItOTQ0MS02YmJiMmU2Y2JlNGIiLCJpYXQiOjE3NTMyMDc4NTAsImV4cCI6MTc1MzI5NDI1MH0.NHRdCU8q1CtHbG_6LyXjfejo1Z5CUG7qin9P7m8LP6Y'
+      }
+    };
+
+    try {
+      const response = await fetch(url, options);
+      if (response.status == 200) {
+        const data: UserProfileData = await response.json();
+        console.log(data);
+        setUser(data)
+
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   const pickImage = async () => {
     // Request permissions first
@@ -91,6 +98,8 @@ const ProfileScreen = () => {
     setLanguageModalVisible(true);
   };
 
+  getUserProfile();
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -104,9 +113,9 @@ const ProfileScreen = () => {
             activeOpacity={0.8}
           >
             <View style={styles.avatarContainer}>
-              {user.avatar ? (
+              {user.avatarUrl ? (
                 <Image
-                  source={{ uri: user.avatar }}
+                  source={{ uri: user.avatarUrl }}
                   style={styles.avatar}
                 />
               ) : (
@@ -145,7 +154,7 @@ const ProfileScreen = () => {
               <View style={[styles.statIcon, { backgroundColor: 'rgba(127, 110, 219, 0.1)' }]}>
                 <MaterialCommunityIcons name="star-four-points" size={20} color="#7f6edb" />
               </View>
-              <Text style={styles.statValue}>{user.xp}</Text>
+              <Text style={styles.statValue}>{user.totalXp}</Text>
               <Text style={styles.statLabel}>Total XP</Text>
             </View>
 
@@ -153,14 +162,14 @@ const ProfileScreen = () => {
               <View style={[styles.statIcon, { backgroundColor: 'rgba(59, 178, 115, 0.1)' }]}>
                 <MaterialCommunityIcons name="book-open-variant" size={20} color="#3bb273" />
               </View>
-              <Text style={styles.statValue}>{user.stats.lessonsCompleted}</Text>
+              <Text style={styles.statValue}>{user.lessonsCompleted}</Text>
               <Text style={styles.statLabel}>Lessons</Text>
             </View>
           </View>
         </View>
 
         {/* Learning Progress */}
-        <View style={styles.section}>
+        {/* <View style={styles.section}>
           <Text style={styles.sectionTitle}>My Languages</Text>
           {user.learning.map((lang, index) => (
             <TouchableOpacity
@@ -187,7 +196,7 @@ const ProfileScreen = () => {
               </View>
             </TouchableOpacity>
           ))}
-        </View>
+        </View> */}
 
         {/* Settings Section */}
         <View style={styles.section}>

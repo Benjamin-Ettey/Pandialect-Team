@@ -1,8 +1,9 @@
-import { FontAwesome5, Ionicons, AntDesign } from '@expo/vector-icons';
+import { AntDesign, FontAwesome5, Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Alert,
+  ActivityIndicator,
   Animated,
   Dimensions,
   Easing,
@@ -18,68 +19,39 @@ import {
 
 const { width, height } = Dimensions.get('window');
 
-type QuestionType = 'translate' | 'listen' | 'match' | 'speak' | 'fill-blank';
+type ExerciseType = 'translation' | 'multiple_choice' | 'matching';
 
-type Question = {
+type Exercise = {
   id: string;
-  type: QuestionType;
-  prompt: string;
-  correctAnswer: string;
+  type: ExerciseType;
+  question: string;
+  hint?: string;
+  order: number;
+  xpReward: number;
+  heartsCost: number;
+  correctAnswer?: string;
   options?: string[];
-  imageUrl?: string;
-  sentence?: string;
-  blankIndex?: number;
+  correctOptionIndex?: number;
+  pairs?: Record<string, string>;
 };
 
 type Lesson = {
   id: string;
   title: string;
-  description: string;
-  xp: number;
-  questions: Question[];
+  xpReward: number;
+  exercises: Exercise[];
 };
 
 const LanguageLessonsPage = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { lang, level, lesson: lessonId } = params;
-
-  // Enhanced lesson data
-  const lesson: Lesson = {
-    id: 'greetings',
-    title: 'Basic Greetings',
-    description: 'Master essential Spanish greetings',
-    xp: 30,
-    questions: [
-      {
-        id: '1',
-        type: 'translate',
-        prompt: 'How do you say "Hello" in Spanish?',
-        correctAnswer: 'Hola',
-        options: ['Hola', 'Adiós', 'Gracias', 'Por favor'],
-        imageUrl: 'https://cdn-icons-png.flaticon.com/512/1973/1973807.png'
-      },
-      {
-        id: '2',
-        type: 'fill-blank',
-        prompt: 'Complete the greeting:',
-        sentence: "___ días (Good morning)",
-        correctAnswer: 'Buenos',
-        options: ['Buenos', 'Buenas', 'Hola', 'Bien'],
-        blankIndex: 0
-      },
-      {
-        id: '3',
-        type: 'match',
-        prompt: 'Match the Spanish with the English',
-        correctAnswer: 'Hola=Hello\nGracias=Thank you\nAdiós=Goodbye',
-        options: ['Hola', 'Hello', 'Gracias', 'Thank you', 'Adiós', 'Goodbye']
-      }
-    ]
-  };
+  const { lang, level, lessonId } = params;
 
   // State management
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [lesson, setLesson] = useState<Lesson | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showNextButton, setShowNextButton] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
@@ -92,25 +64,66 @@ const LanguageLessonsPage = () => {
   const [hearts, setHearts] = useState(3);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
 
-  const currentQuestion = lesson.questions[currentQuestionIndex];
+  const currentExercise = lesson?.exercises?.[currentExerciseIndex];
   const progressWidth = progress.interpolate({
     inputRange: [0, 100],
-    outputRange: ['0%', '100%']
+    outputRange: ['0%', `${lesson?.exercises?.length ?
+      ((currentExerciseIndex + 1) / lesson.exercises.length) * 100 : 0}%`]
   });
 
+  useEffect(() => {
+    const fetchLesson = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const accessToken = await AsyncStorage.getItem('accessToken');
+        if (!accessToken) {
+          router.push('/login');
+          return;
+        }
+
+        const response = await fetch(
+          `http://localhost:8080/api/exercises?lessonId=${lessonId}`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch lesson');
+        }
+
+        const data = await response.json();
+        setLesson(data);
+      } catch (err) {
+        setError('Failed to load lesson. Please try again.');
+        console.error('Error fetching lesson:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (lessonId) {
+      fetchLesson();
+    }
+  }, [lessonId]);
+
   const handleAnswerSelect = (answer: string) => {
-    if (currentQuestion.type === 'match') {
-      // For match questions, handle pair selection
+    if (!currentExercise) return;
+
+    if (currentExercise.type === 'matching') {
       if (!selectedMatch) {
         setSelectedMatch(answer);
       } else {
-        // Check if this is a valid pair
-        const correctPairs = currentQuestion.correctAnswer.split('\n');
-        const isPairValid = correctPairs.some(pair => {
-          const [left, right] = pair.split('=');
-          return (left === selectedMatch && right === answer) ||
-            (right === selectedMatch && left === answer);
-        });
+        const isPairValid = Object.entries(currentExercise.pairs || {}).some(
+          ([key, value]) =>
+            (key === selectedMatch && value === answer) ||
+            (value === selectedMatch && key === answer)
+        );
 
         if (isPairValid) {
           setMatchedPairs({
@@ -119,7 +132,6 @@ const LanguageLessonsPage = () => {
             [answer]: selectedMatch
           });
         } else {
-          // Wrong pair - lose a heart
           setHearts(prev => prev - 1);
         }
         setSelectedMatch(null);
@@ -131,75 +143,96 @@ const LanguageLessonsPage = () => {
   };
 
   const handleNext = () => {
-    // Validate answer
+    if (!currentExercise) return;
+
     let correct = false;
 
-    if (currentQuestion.type === 'match') {
-      // Validate matches
-      const correctPairs = currentQuestion.correctAnswer.split('\n');
-      correct = correctPairs.every(pair => {
-        const [spanish, english] = pair.split('=');
-        return matchedPairs[spanish] === english || matchedPairs[english] === spanish;
-      });
+    if (currentExercise.type === 'matching') {
+      correct = Object.entries(currentExercise.pairs || {}).every(
+        ([key, value]) => matchedPairs[key] === value || matchedPairs[value] === key
+      );
+    } else if (currentExercise.type === 'multiple_choice') {
+      correct = selectedAnswer === currentExercise.options?.[currentExercise.correctOptionIndex || 0];
     } else {
-      correct = selectedAnswer === currentQuestion.correctAnswer;
+      correct = selectedAnswer === currentExercise.correctAnswer;
     }
 
     setIsCorrect(correct);
     setShowFeedbackModal(true);
 
     if (correct) {
-      setXp(prev => prev + 10);
+      setXp(prev => prev + (currentExercise.xpReward || 0));
       setStreak(prev => prev + 1);
     } else {
       setStreak(0);
     }
   };
 
-  const continueToNextQuestion = () => {
+  const continueToNextExercise = () => {
     setShowFeedbackModal(false);
 
-    // Animate progress
     Animated.timing(progress, {
-      toValue: ((currentQuestionIndex + 1) / lesson.questions.length) * 100,
+      toValue: lesson?.exercises?.length ?
+        ((currentExerciseIndex + 1) / lesson.exercises.length) * 100 : 0,
       duration: 500,
       easing: Easing.linear,
       useNativeDriver: false
     }).start();
 
-    if (currentQuestionIndex < lesson.questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
+    if (lesson && currentExerciseIndex < lesson.exercises.length - 1) {
+      setCurrentExerciseIndex(currentExerciseIndex + 1);
       setSelectedAnswer(null);
       setShowNextButton(false);
       setMatchedPairs({});
       setSelectedMatch(null);
     } else {
-      // Lesson completed
       setShowCompletionModal(true);
+      completeLesson();
+    }
+  };
+
+  const completeLesson = async () => {
+    try {
+      const accessToken = await AsyncStorage.getItem('accessToken');
+      if (!accessToken || !lesson) return;
+
+      await fetch(
+        `http://localhost:8080/api/lessons/${lesson.id}/complete`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Error completing lesson:', error);
     }
   };
 
   const handleContinueHome = () => {
-    // Here you would typically save progress to backend
     setShowCompletionModal(false);
     router.push('/(root)/(tabs)/englishPages/beginner/HomepageTabs/home');
   };
 
-  const renderQuestion = () => {
-    switch (currentQuestion.type) {
-      case 'translate':
+  const renderExercise = () => {
+    if (!currentExercise) {
+      return (
+        <View style={styles.questionContainer}>
+          <Text>No exercise available</Text>
+        </View>
+      );
+    }
+
+    switch (currentExercise.type) {
+      case 'translation':
+      case 'multiple_choice':
         return (
           <View style={styles.questionContainer}>
-            <Text style={styles.questionText}>{currentQuestion.prompt}</Text>
-            {currentQuestion.imageUrl && (
-              <Image
-                source={{ uri: currentQuestion.imageUrl }}
-                style={styles.questionImage}
-                resizeMode="contain"
-              />
-            )}
+            <Text style={styles.questionText}>{currentExercise.question}</Text>
             <View style={styles.optionsContainer}>
-              {currentQuestion.options?.map((option, index) => (
+              {currentExercise.options?.map((option, index) => (
                 <TouchableOpacity
                   key={index}
                   style={[
@@ -219,90 +252,53 @@ const LanguageLessonsPage = () => {
           </View>
         );
 
-      case 'fill-blank':
-        const sentenceParts = currentQuestion.sentence?.split('___') || [];
-        return (
-          <View style={styles.questionContainer}>
-            <Text style={styles.questionText}>{currentQuestion.prompt}</Text>
-            <View style={styles.sentenceContainer}>
-              <Text style={styles.sentenceText}>{sentenceParts[0]}</Text>
-              <View style={[
-                styles.blankSpace,
-                selectedAnswer && styles.blankFilled
-              ]}>
-                {selectedAnswer ? (
-                  <Text style={styles.blankText}>{selectedAnswer}</Text>
-                ) : (
-                  <Text style={styles.blankPlaceholder}>______</Text>
-                )}
-              </View>
-              <Text style={styles.sentenceText}>{sentenceParts[1]}</Text>
-            </View>
-            <View style={styles.optionsContainer}>
-              {currentQuestion.options?.map((option, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.optionButton,
-                    selectedAnswer === option && styles.selectedOption,
-                    selectedAnswer === option && isCorrect && styles.correctOption,
-                    selectedAnswer === option && !isCorrect && styles.incorrectOption
-                  ]}
-                  onPress={() => handleAnswerSelect(option)}
-                  activeOpacity={0.7}
-                  disabled={showFeedbackModal}
-                >
-                  <Text style={styles.optionText}>{option}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        );
+      case 'matching':
+        const leftItems = Object.keys(currentExercise.pairs || {});
+        const rightItems = Object.values(currentExercise.pairs || {});
 
-      case 'match':
         return (
           <View style={styles.questionContainer}>
-            <Text style={styles.questionText}>{currentQuestion.prompt}</Text>
+            <Text style={styles.questionText}>{currentExercise.question}</Text>
             <View style={styles.matchColumns}>
               <View style={styles.matchColumn}>
-                {currentQuestion.options?.filter((_, i) => i % 2 === 0).map((option) => (
+                {leftItems.map((item) => (
                   <TouchableOpacity
-                    key={option}
+                    key={item}
                     style={[
                       styles.matchOption,
-                      selectedMatch === option && styles.selectedMatch,
-                      matchedPairs[option] && styles.matchedOption,
-                      showFeedbackModal && matchedPairs[option] && styles.correctOption,
-                      showFeedbackModal && !matchedPairs[option] && styles.incorrectOption
+                      selectedMatch === item && styles.selectedMatch,
+                      matchedPairs[item] && styles.matchedOption,
+                      showFeedbackModal && matchedPairs[item] && styles.correctOption,
+                      showFeedbackModal && !matchedPairs[item] && styles.incorrectOption
                     ]}
-                    onPress={() => handleAnswerSelect(option)}
+                    onPress={() => handleAnswerSelect(item)}
                     activeOpacity={0.7}
-                    disabled={showFeedbackModal || !!matchedPairs[option]}
+                    disabled={showFeedbackModal || !!matchedPairs[item]}
                   >
-                    <Text style={styles.optionText}>{option}</Text>
-                    {matchedPairs[option] && (
+                    <Text style={styles.optionText}>{item}</Text>
+                    {matchedPairs[item] && (
                       <Ionicons name="checkmark" size={20} color="#58CC02" style={styles.matchCheck} />
                     )}
                   </TouchableOpacity>
                 ))}
               </View>
               <View style={styles.matchColumn}>
-                {currentQuestion.options?.filter((_, i) => i % 2 === 1).map((option) => (
+                {rightItems.map((item) => (
                   <TouchableOpacity
-                    key={option}
+                    key={item}
                     style={[
                       styles.matchOption,
-                      selectedMatch === option && styles.selectedMatch,
-                      matchedPairs[option] && styles.matchedOption,
-                      showFeedbackModal && matchedPairs[option] && styles.correctOption,
-                      showFeedbackModal && !matchedPairs[option] && styles.incorrectOption
+                      selectedMatch === item && styles.selectedMatch,
+                      matchedPairs[item] && styles.matchedOption,
+                      showFeedbackModal && matchedPairs[item] && styles.correctOption,
+                      showFeedbackModal && !matchedPairs[item] && styles.incorrectOption
                     ]}
-                    onPress={() => handleAnswerSelect(option)}
+                    onPress={() => handleAnswerSelect(item)}
                     activeOpacity={0.7}
-                    disabled={showFeedbackModal || !!matchedPairs[option]}
+                    disabled={showFeedbackModal || !!matchedPairs[item]}
                   >
-                    <Text style={styles.optionText}>{option}</Text>
-                    {matchedPairs[option] && (
+                    <Text style={styles.optionText}>{item}</Text>
+                    {matchedPairs[item] && (
                       <Ionicons name="checkmark" size={20} color="#58CC02" style={styles.matchCheck} />
                     )}
                   </TouchableOpacity>
@@ -313,9 +309,56 @@ const LanguageLessonsPage = () => {
         );
 
       default:
-        return null;
+        return (
+          <View style={styles.questionContainer}>
+            <Text>Unknown exercise type</Text>
+          </View>
+        );
     }
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#7F5AED" />
+          <Text>Loading lesson...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.retryButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!lesson || !lesson.exercises?.length) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.emptyContainer}>
+          <Text>This lesson has no exercises yet</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.retryButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -340,7 +383,7 @@ const LanguageLessonsPage = () => {
       {/* Lesson Content */}
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.lessonTitle}>{lesson.title}</Text>
-        {renderQuestion()}
+        {renderExercise()}
       </ScrollView>
 
       {/* Next Button */}
@@ -351,7 +394,7 @@ const LanguageLessonsPage = () => {
           activeOpacity={0.8}
         >
           <Text style={styles.nextButtonText}>
-            {currentQuestionIndex < lesson.questions.length - 1 ? 'Next' : 'Finish'}
+            {currentExerciseIndex < lesson.exercises.length - 1 ? 'Next' : 'Finish'}
           </Text>
         </TouchableOpacity>
       )}
@@ -369,15 +412,15 @@ const LanguageLessonsPage = () => {
               color={isCorrect ? "#58CC02" : "#FF3B30"}
             />
             <Text style={styles.feedbackText}>
-              {isCorrect ? 'Correct' : `Incorrect. The answer is: ${currentQuestion.correctAnswer}`}
+              {isCorrect ? 'Correct!' : `Incorrect. ${currentExercise?.hint || ''}`}
             </Text>
             <TouchableOpacity
               style={styles.continueButton}
-              onPress={continueToNextQuestion}
+              onPress={continueToNextExercise}
               activeOpacity={0.8}
             >
               <Text style={styles.continueButtonText}>
-                {currentQuestionIndex < lesson.questions.length - 1 ? 'Continue' : 'Finish Lesson'}
+                {currentExerciseIndex < lesson.exercises.length - 1 ? 'Continue' : 'Finish Lesson'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -407,7 +450,7 @@ const LanguageLessonsPage = () => {
               </View>
               <View style={styles.statItem}>
                 <Ionicons name="trophy" size={24} color="#58CC02" />
-                <Text style={styles.statText}>Perfect Score!</Text>
+                <Text style={styles.statText}>{lesson.xpReward} Total XP</Text>
               </View>
             </View>
 
@@ -500,13 +543,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 28
   },
-  questionImage: {
-    width: '100%',
-    height: 150,
-    marginVertical: 16,
-    borderRadius: 8,
-    alignSelf: 'center'
-  },
   optionsContainer: {
     marginBottom: 24
   },
@@ -568,39 +604,6 @@ const styles = StyleSheet.create({
   streakText: {
     color: '#FFFFFF',
     fontWeight: 'bold'
-  },
-  sentenceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 20,
-    flexWrap: 'wrap'
-  },
-  sentenceText: {
-    fontSize: 18,
-    color: '#333'
-  },
-  blankSpace: {
-    minWidth: 100,
-    borderBottomWidth: 2,
-    borderBottomColor: '#58CC02',
-    marginHorizontal: 8,
-    paddingVertical: 4
-  },
-  blankFilled: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 8,
-    paddingHorizontal: 12
-  },
-  blankText: {
-    fontSize: 18,
-    textAlign: 'center',
-    color: '#333'
-  },
-  blankPlaceholder: {
-    fontSize: 18,
-    color: '#999',
-    textAlign: 'center'
   },
   matchColumns: {
     flexDirection: 'row',
@@ -734,6 +737,42 @@ const styles = StyleSheet.create({
   continueHomeButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
+    fontWeight: 'bold'
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    gap: 16
+  },
+  errorText: {
+    fontSize: 18,
+    color: '#FF3B30',
+    textAlign: 'center'
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    gap: 16
+  },
+  retryButton: {
+    backgroundColor: '#7F5AED',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
     fontWeight: 'bold'
   }
 });

@@ -37,3 +37,7 @@ yarn-error.*
 *.tsbuildinfo
 
 app-example
+/docs/api_requirements.md
+/docs/plan.md
+/pnpm-lock.yaml
+/pnpm-workspace.yaml
