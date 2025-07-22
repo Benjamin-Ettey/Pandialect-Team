@@ -27,12 +27,12 @@ type AlphabetCharacter = {
   name: string;
   pronunciation: string;
   audioUrl: string;
-  ipa?: string; // International Phonetic Alphabet notation
-  mouthPosition?: string; // Description of mouth position
-  tonguePosition?: string; // Description of tongue position
-  commonMispronunciations?: string[]; // Common mistakes
-  audioUrlSlow?: string; // Slow pronunciation
-  audioUrlNative?: string; // Native speaker example
+  ipa?: string;
+  mouthPosition?: string;
+  tonguePosition?: string;
+  commonMispronunciations?: string[];
+  audioUrlSlow?: string;
+  audioUrlNative?: string;
   examples: {
     word: string;
     meaning: string;
@@ -42,52 +42,66 @@ type AlphabetCharacter = {
   difficulty?: 'easy' | 'medium' | 'hard';
 };
 
-// Mock data - this would come from your backend API
+// Updated mock data with English alphabet characters
 const MOCK_ALPHABET_DATA: AlphabetCharacter[] = [
   {
     id: 'a1',
-    character: 'あ',
-    name: 'Hiragana A',
-    pronunciation: 'ah',
-    ipa: '/a/',
-    mouthPosition: 'Open your mouth wide, lips relaxed',
-    tonguePosition: 'Tongue low in mouth, tip behind lower teeth',
-    commonMispronunciations: ['like "a" in "cat" (too short)', 'like "a" in "cake" (diphthong)'],
+    character: 'A',
+    name: 'Letter A',
+    pronunciation: 'ay',
+    ipa: '/eɪ/',
+    mouthPosition: 'Start with mouth open wide, then close slightly',
+    tonguePosition: 'Tongue starts low, then moves to mid position',
+    commonMispronunciations: ['like "a" in "cat" (too short)', 'like "a" in "car" (too open)'],
     audioUrl: 'https://example.com/audio/a.mp3',
     audioUrlSlow: 'https://example.com/audio/a_slow.mp3',
     audioUrlNative: 'https://example.com/audio/a_native.mp3',
     examples: [
-      { word: 'あめ', meaning: 'rain', audioUrl: 'https://example.com/audio/ame.mp3' },
-      { word: 'あき', meaning: 'autumn', audioUrl: 'https://example.com/audio/aki.mp3' },
+      { word: 'Apple', meaning: 'A fruit', audioUrl: 'https://example.com/audio/apple.mp3' },
+      { word: 'Animal', meaning: 'Living creature', audioUrl: 'https://example.com/audio/animal.mp3' },
     ],
-    similarTo: 'like "a" in "father"',
+    similarTo: 'like "a" in "cake"',
     difficulty: 'easy'
   },
   {
-    id: 'k1',
-    character: 'か',
-    name: 'Hiragana Ka',
-    pronunciation: 'kah',
-    ipa: '/ka/',
-    mouthPosition: 'Start with back of tongue touching soft palate, then release',
-    tonguePosition: 'Back of tongue raised, then drops suddenly',
-    commonMispronunciations: ['adding aspiration (like English "k")', 'making it too soft'],
-    audioUrl: 'https://example.com/audio/ka.mp3',
-    audioUrlSlow: 'https://example.com/audio/ka_slow.mp3',
-    audioUrlNative: 'https://example.com/audio/ka_native.mp3',
+    id: 'b1',
+    character: 'B',
+    name: 'Letter B',
+    pronunciation: 'bee',
+    ipa: '/biː/',
+    mouthPosition: 'Press lips together, then release with voice',
+    tonguePosition: 'Tongue stays neutral',
+    commonMispronunciations: ['making it sound like "p" (no voice)', 'making it sound like "v"'],
+    audioUrl: 'https://example.com/audio/b.mp3',
+    audioUrlSlow: 'https://example.com/audio/b_slow.mp3',
+    audioUrlNative: 'https://example.com/audio/b_native.mp3',
     examples: [
-      { word: 'かさ', meaning: 'umbrella', audioUrl: 'https://example.com/audio/kasa.mp3' },
-      { word: 'かばん', meaning: 'bag', audioUrl: 'https://example.com/audio/kaban.mp3' },
+      { word: 'Ball', meaning: 'Round object', audioUrl: 'https://example.com/audio/ball.mp3' },
+      { word: 'Book', meaning: 'Reading material', audioUrl: 'https://example.com/audio/book.mp3' },
     ],
     difficulty: 'easy'
   },
-  // More characters would follow...
+  // Continue with the rest of the alphabet...
+  {
+    id: 'c1',
+    character: 'C',
+    name: 'Letter C',
+    pronunciation: 'see',
+    ipa: '/siː/',
+    examples: [
+      { word: 'Cat', meaning: 'Feline animal' },
+      { word: 'Car', meaning: 'Vehicle' },
+    ],
+    difficulty: 'easy'
+  },
+  
+  // Add more letters as needed...
 ];
 
 const Progress = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { lang = 'ja', level = 'beginner' } = params;
+  const { lang = 'en', level = 'beginner' } = params;
 
   const [alphabet, setAlphabet] = useState<AlphabetCharacter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,25 +112,17 @@ const Progress = () => {
   const [activeAudio, setActiveAudio] = useState<string | null>(null);
   const [showPronunciationTips, setShowPronunciationTips] = useState(false);
 
-  // Calculate responsive dimensions
-  const numColumns = Math.floor(width / 100); // Adjust based on screen width
-  const characterCardSize = (width - 32 - (numColumns - 1) * 12) / numColumns;
-
   // Fetch alphabet data from backend
   useEffect(() => {
     const fetchAlphabet = async () => {
       try {
         setLoading(true);
-        // Replace with your actual API call:
-        // const response = await fetch(`your-api-url/alphabets/${lang}/${level}`);
-        // const data = await response.json();
-
         // Simulate API delay
         await new Promise(resolve => setTimeout(resolve, 800));
         setAlphabet(MOCK_ALPHABET_DATA);
 
-        // Select first character by default on small screens
-        if (width < 400 && MOCK_ALPHABET_DATA.length > 0) {
+        // Select first character by default
+        if (MOCK_ALPHABET_DATA.length > 0) {
           setSelectedChar(MOCK_ALPHABET_DATA[0]);
         }
       } catch (err) {
@@ -139,7 +145,6 @@ const Progress = () => {
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-      // Determine which audio URL to use based on type
       const urlToPlay = type === 'slow' ? selectedChar?.audioUrlSlow :
         type === 'native' ? selectedChar?.audioUrlNative : audioUrl;
 
@@ -180,22 +185,18 @@ const Progress = () => {
     setShowPronunciationTips(false);
   };
 
-  const renderCharacter = ({ item }: { item: AlphabetCharacter }) => (
+  const renderAlphabetItem = ({ item }: { item: AlphabetCharacter }) => (
     <TouchableOpacity
       style={[
-        styles.characterCard,
-        selectedChar?.id === item.id && styles.selectedCharacter,
-        {
-          backgroundColor: getDifficultyColor(item.difficulty),
-          width: characterCardSize,
-          height: characterCardSize
-        }
+        styles.alphabetItem,
+        selectedChar?.id === item.id && styles.selectedAlphabetItem,
+        { backgroundColor: getDifficultyColor(item.difficulty) }
       ]}
       onPress={() => handleCharacterPress(item)}
       activeOpacity={0.7}
     >
-      <Text style={styles.character}>{item.character}</Text>
-      <Text style={styles.pronunciation}>{item.pronunciation}</Text>
+      <Text style={styles.alphabetCharacter}>{item.character}</Text>
+      <Text style={styles.alphabetPronunciation}>{item.pronunciation}</Text>
       {selectedChar?.id === item.id && isPlaying && activeAudio === 'normal' && (
         <View style={styles.playingIndicator}>
           <Feather name="activity" size={16} color="#fff" />
@@ -238,21 +239,21 @@ const Progress = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Main Content */}
-      <View style={styles.content}>
-        {/* Alphabet Grid */}
+      {/* Alphabet Horizontal Scroll */}
+      <View style={styles.alphabetScrollContainer}>
         <FlatList
           data={alphabet}
-          renderItem={renderCharacter}
+          renderItem={renderAlphabetItem}
           keyExtractor={item => item.id}
-          numColumns={numColumns}
-          columnWrapperStyle={styles.characterRow}
-          contentContainerStyle={styles.characterGrid}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={
-            <Text style={styles.gridTitle}>{lang === 'ja' ? 'Hiragana Characters' : 'Alphabet'}</Text>
-          }
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.alphabetScrollContent}
         />
+      </View>
+
+      {/* Main Content */}
+      <View style={styles.content}>
+        <Text style={styles.gridTitle}>{lang === 'ja' ? 'Hiragana Characters' : 'Alphabet'}</Text>
 
         {/* Selected Character Details */}
         {selectedChar && (
@@ -325,7 +326,6 @@ const Progress = () => {
               </Text>
             )}
 
-            {/* Pronunciation Tips Toggle */}
             <TouchableOpacity
               style={styles.tipsToggle}
               onPress={() => setShowPronunciationTips(!showPronunciationTips)}
@@ -340,7 +340,6 @@ const Progress = () => {
               />
             </TouchableOpacity>
 
-            {/* Pronunciation Tips */}
             {showPronunciationTips && (
               <View style={styles.pronunciationTips}>
                 {selectedChar.mouthPosition && (
@@ -371,7 +370,6 @@ const Progress = () => {
               </View>
             )}
 
-            {/* Examples */}
             <View style={styles.examplesContainer}>
               <Text style={styles.examplesTitle}>Example Words:</Text>
               {selectedChar.examples.map((example, index) => (
@@ -453,52 +451,44 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
-  content: {
-    flex: 1,
-    paddingBottom: 80, // Space for progress indicator
+  // Alphabet scroll styles
+  alphabetScrollContainer: {
+    height: 100,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
-  gridTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
+  alphabetScrollContent: {
     paddingHorizontal: 16,
-    top: '80%',
-    color: '#7f6edb'
+    alignItems: 'center',
   },
-  characterRow: {
-    justifyContent: 'space-between',
-    marginBottom: 12,
-    paddingHorizontal: 16,
-  },
-  characterGrid: {
-    paddingBottom: 16,
-  },
-  characterCard: {
+  alphabetItem: {
+    width: 70,
+    height: 70,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#7f6edb',
+    marginRight: 10,
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 4,
     elevation: 3,
-    top: '30%'
   },
-  selectedCharacter: {
-    transform: [{ scale: 1.05 }],
+  selectedAlphabetItem: {
+    transform: [{ scale: 1.1 }],
     shadowColor: '#7f6edb',
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
   },
-  character: {
+  alphabetCharacter: {
     fontSize: 32,
     color: '#fff',
     fontWeight: 'bold',
   },
-  pronunciation: {
-    fontSize: 14,
+  alphabetPronunciation: {
+    fontSize: 12,
     color: 'rgba(255,255,255,0.9)',
     marginTop: 4,
   },
@@ -510,6 +500,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 2,
   },
+  content: {
+    flex: 1,
+    paddingBottom: 80,
+  },
+  gridTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    paddingHorizontal: 16,
+    color: '#7f6edb'
+  },
   detailCard: {
     backgroundColor: '#f9f9f9',
     borderRadius: 16,
@@ -520,7 +521,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 8,
     elevation: 2,
-    maxHeight: height * 0.5, // Limit height on larger screens
+    maxHeight: height * 0.5,
   },
   detailCardContent: {
     padding: 20,

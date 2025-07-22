@@ -189,6 +189,21 @@ const ProfileScreen = () => {
           ))}
         </View>
 
+        {/* Word Bank Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Word Bank</Text>
+          <TouchableOpacity
+            style={styles.settingItem}
+            onPress={() => router.push('/(root)/(tabs)/WordBank/wordBank')}
+          >
+            <View style={styles.settingIcon}>
+              <FontAwesome5 name="book" size={20} color="#7f6edb" />
+            </View>
+            <Text style={styles.settingText}>View Saved Words</Text>
+            <Ionicons name="chevron-forward" size={20} color="#ccc" />
+          </TouchableOpacity>
+        </View>
+
         {/* Settings Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Settings</Text>
