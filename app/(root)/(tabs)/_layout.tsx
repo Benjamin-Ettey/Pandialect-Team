@@ -103,6 +103,23 @@ const _layout = () => {
         }}
       />
 
+      <Stack.Screen
+        name="WordBank"
+        options={{
+          title: "Word Bank",
+          headerTintColor: '#7f6edb',
+          headerStyle: {
+            backgroundColor: '#fff',
+          },
+          headerShadowVisible: false,
+          headerBackTitle: ".",
+          headerTitleAlign: 'center',
+          headerTitleStyle: {
+            fontWeight: 'bold'
+          }
+        }}
+      />
+
 
       
 
