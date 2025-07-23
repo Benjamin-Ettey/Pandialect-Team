@@ -1,11 +1,14 @@
-import { AntDesign, Feather, Ionicons } from '@expo/vector-icons';
+import { getAlphabetTitle, LanguageCode } from '@/utils/language';
+import { Feather, Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Audio } from 'expo-av';
+import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
   FlatList,
-  Image,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -15,22 +18,26 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Audio } from 'expo-av';
-import * as Haptics from 'expo-haptics';
 
 const { width, height } = Dimensions.get('window');
 
-// Types for our data structure
-type AlphabetCharacter = {
+type AlphabetListCharacter = {
+  id: string;
+  character: string;
+  pronunciation: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+};
+
+type AlphabetDetailCharacter = {
   id: string;
   character: string;
   name: string;
   pronunciation: string;
-  audioUrl: string;
   ipa?: string;
   mouthPosition?: string;
   tonguePosition?: string;
   commonMispronunciations?: string[];
+  audioUrl: string;
   audioUrlSlow?: string;
   audioUrlNative?: string;
   examples: {
@@ -42,99 +49,95 @@ type AlphabetCharacter = {
   difficulty?: 'easy' | 'medium' | 'hard';
 };
 
-// Updated mock data with English alphabet characters
-const MOCK_ALPHABET_DATA: AlphabetCharacter[] = [
-  {
-    id: 'a1',
-    character: 'A',
-    name: 'Letter A',
-    pronunciation: 'ay',
-    ipa: '/eɪ/',
-    mouthPosition: 'Start with mouth open wide, then close slightly',
-    tonguePosition: 'Tongue starts low, then moves to mid position',
-    commonMispronunciations: ['like "a" in "cat" (too short)', 'like "a" in "car" (too open)'],
-    audioUrl: 'https://example.com/audio/a.mp3',
-    audioUrlSlow: 'https://example.com/audio/a_slow.mp3',
-    audioUrlNative: 'https://example.com/audio/a_native.mp3',
-    examples: [
-      { word: 'Apple', meaning: 'A fruit', audioUrl: 'https://example.com/audio/apple.mp3' },
-      { word: 'Animal', meaning: 'Living creature', audioUrl: 'https://example.com/audio/animal.mp3' },
-    ],
-    similarTo: 'like "a" in "cake"',
-    difficulty: 'easy'
-  },
-  {
-    id: 'b1',
-    character: 'B',
-    name: 'Letter B',
-    pronunciation: 'bee',
-    ipa: '/biː/',
-    mouthPosition: 'Press lips together, then release with voice',
-    tonguePosition: 'Tongue stays neutral',
-    commonMispronunciations: ['making it sound like "p" (no voice)', 'making it sound like "v"'],
-    audioUrl: 'https://example.com/audio/b.mp3',
-    audioUrlSlow: 'https://example.com/audio/b_slow.mp3',
-    audioUrlNative: 'https://example.com/audio/b_native.mp3',
-    examples: [
-      { word: 'Ball', meaning: 'Round object', audioUrl: 'https://example.com/audio/ball.mp3' },
-      { word: 'Book', meaning: 'Reading material', audioUrl: 'https://example.com/audio/book.mp3' },
-    ],
-    difficulty: 'easy'
-  },
-  // Continue with the rest of the alphabet...
-  {
-    id: 'c1',
-    character: 'C',
-    name: 'Letter C',
-    pronunciation: 'see',
-    ipa: '/siː/',
-    examples: [
-      { word: 'Cat', meaning: 'Feline animal' },
-      { word: 'Car', meaning: 'Vehicle' },
-    ],
-    difficulty: 'easy'
-  },
-  
-  // Add more letters as needed...
-];
+const API_BASE_URL = 'http://localhost:8080/api/alphabets';
 
 const Progress = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { lang = 'en', level = 'beginner' } = params;
-
-  const [alphabet, setAlphabet] = useState<AlphabetCharacter[]>([]);
+  const { lang = 'fr', level = 'beginner' } = params;
+  const languageCode = lang as LanguageCode;
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [alphabetList, setAlphabetList] = useState<AlphabetListCharacter[]>([]);
+  const [selectedChar, setSelectedChar] = useState<AlphabetDetailCharacter | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingDetails, setLoadingDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedChar, setSelectedChar] = useState<AlphabetCharacter | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeAudio, setActiveAudio] = useState<string | null>(null);
   const [showPronunciationTips, setShowPronunciationTips] = useState(false);
 
-  // Fetch alphabet data from backend
+
   useEffect(() => {
-    const fetchAlphabet = async () => {
+    console.log('Progress screen mounted with params:', { lang, level });
+    console.log('Getting access token from AsyncStorage...');
+    const loadUserData = async () => {
+      try {
+        const storedToken = await AsyncStorage.getItem('accessToken');
+        console.log('Access token loaded:', storedToken);
+        setAccessToken(storedToken);
+      } catch (error) {
+        console.error("Failed to load user data:", error);
+      }
+    };
+    loadUserData();
+  }, []);
+
+  // Fetch alphabet list
+  useEffect(() => {
+    if (!accessToken) return; 
+
+    const fetchAlphabetList = async () => {
+      console.log("Access token:", accessToken);
       try {
         setLoading(true);
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 800));
-        setAlphabet(MOCK_ALPHABET_DATA);
+        const response = await fetch(`${API_BASE_URL}/list?lang=${languageCode}`,{
+            method: 'GET',
+            headers: {Authorization: `Bearer ${accessToken}`}
+          }
+        );
 
-        // Select first character by default
-        if (MOCK_ALPHABET_DATA.length > 0) {
-          setSelectedChar(MOCK_ALPHABET_DATA[0]);
+        if (!response.ok) throw new Error('Failed to fetch alphabet list');
+
+        const data = await response.json();
+        setAlphabetList(data);
+
+        if (data.length > 0) {
+          handleCharacterPress(data[0]);
         }
       } catch (err) {
-        setError('Failed to load alphabet data');
-        console.error(err);
+        setError(err.message || 'Failed to load alphabet data');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchAlphabet();
-  }, [lang, level]);
+    fetchAlphabetList();
+  }, [languageCode, accessToken]);
+
+  // Handle character selection
+  const handleCharacterPress = async (char: AlphabetListCharacter) => {
+    try {
+      setLoadingDetails(true);
+      const response = await fetch(`${API_BASE_URL}/${char.id}`, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${accessToken}` }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch character details');
+      }
+
+      const details = await response.json();
+      setSelectedChar(details);
+      playSound(details.audioUrl);
+    } catch (err) {
+      console.error('Failed to load character details', err);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
 
   // Play pronunciation audio
   const playSound = async (audioUrl: string, type: 'normal' | 'slow' | 'native' = 'normal') => {
@@ -179,13 +182,7 @@ const Progress = () => {
     };
   }, [sound]);
 
-  const handleCharacterPress = (char: AlphabetCharacter) => {
-    setSelectedChar(char);
-    playSound(char.audioUrl);
-    setShowPronunciationTips(false);
-  };
-
-  const renderAlphabetItem = ({ item }: { item: AlphabetCharacter }) => (
+  const renderAlphabetItem = ({ item }: { item: AlphabetListCharacter }) => (
     <TouchableOpacity
       style={[
         styles.alphabetItem,
@@ -217,7 +214,7 @@ const Progress = () => {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#7f6edb" />
-        <Text style={styles.loadingText}>Loading {lang.toUpperCase()} Alphabet...</Text>
+        <Text style={styles.loadingText}>Loading {Array.isArray(lang) ? lang[0].toUpperCase() : lang.toUpperCase()} Alphabet...</Text>
       </View>
     );
   }
@@ -237,12 +234,13 @@ const Progress = () => {
     );
   }
 
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Alphabet Horizontal Scroll */}
       <View style={styles.alphabetScrollContainer}>
         <FlatList
-          data={alphabet}
+          data={alphabetList}
           renderItem={renderAlphabetItem}
           keyExtractor={item => item.id}
           horizontal
@@ -256,25 +254,33 @@ const Progress = () => {
         <Text style={styles.gridTitle}>{lang === 'ja' ? 'Hiragana Characters' : 'Alphabet'}</Text>
 
         {/* Selected Character Details */}
-        {selectedChar && (
+        {loadingDetails ? (
+          <View style={styles.detailCard}>
+            <Text style={styles.gridTitle}>
+              {getAlphabetTitle(languageCode)} {languageCode === 'ja' ? 'Characters' : ''}
+            </Text>
+          </View>
+        ) : selectedChar && (
           <ScrollView
-            style={styles.detailCard}
+            style={styles.detailCard}S
             contentContainerStyle={styles.detailCardContent}
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.detailHeader}>
               <Text style={styles.detailCharacter}>{selectedChar.character}</Text>
               <View style={styles.pronunciationButtons}>
-                <TouchableOpacity
-                  onPress={() => playSound(selectedChar.audioUrl, 'slow')}
-                  style={[
-                    styles.playButton,
-                    activeAudio === 'slow' && styles.activePlayButton
-                  ]}
-                >
-                  <Ionicons name="speedometer" size={18} color="#fff" />
-                  <Text style={styles.playButtonText}>Slow</Text>
-                </TouchableOpacity>
+                {selectedChar.audioUrlSlow && (
+                  <TouchableOpacity
+                    onPress={() => playSound(selectedChar.audioUrl, 'slow')}
+                    style={[
+                      styles.playButton,
+                      activeAudio === 'slow' && styles.activePlayButton
+                    ]}
+                  >
+                    <Ionicons name="speedometer" size={18} color="#fff" />
+                    <Text style={styles.playButtonText}>Slow</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
                   onPress={() => playSound(selectedChar.audioUrl)}
                   style={[
@@ -404,13 +410,11 @@ const Progress = () => {
   );
 };
 
-export default Progress;
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-    top: '5%'
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   loadingContainer: {
     flex: 1,
@@ -451,7 +455,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
-  // Alphabet scroll styles
   alphabetScrollContainer: {
     height: 100,
     paddingVertical: 10,
@@ -521,7 +524,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 8,
     elevation: 2,
-    maxHeight: height * 0.5,
+    maxHeight: height * 0.7,
   },
   detailCardContent: {
     padding: 20,
@@ -684,3 +687,5 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
+
+export default Progress;

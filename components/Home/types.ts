@@ -21,8 +21,6 @@ export const LANGUAGES: Language[] = [
     { name: 'Spanish', flag: '🇪🇸', code: 'es' },
     { name: 'French', flag: '🇫🇷', code: 'fr' },
     { name: 'German', flag: '🇩🇪', code: 'de' },
-    { name: 'Italian', flag: '🇮🇹', code: 'it' },
-    { name: 'Mandarin', flag: '🇨🇳', code: 'zh' },
     { name: 'Japanese', flag: '🇯🇵', code: 'ja' },
 ];
 

@@ -1,10 +1,10 @@
 import { Feather, FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Alert,
-  Animated,
   Image,
   Modal,
   ScrollView,
@@ -12,112 +12,213 @@ import {
   Text,
   TouchableOpacity,
   useWindowDimensions,
-  View
+  View,
+  ActivityIndicator,
+  RefreshControl
 } from 'react-native';
 
 type UserProfileData = {
-  name: string
-  email: string
-  avatarUrl: string | null
-  streak: number
-  totalXp: number
-  lessonsCompleted: number
-}
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl: string | null;
+  streak: number;
+  totalXp: number;
+  lessonsCompleted: number;
+  level: string;
+  learning?: Array<{
+    language: string;
+    flag: string;
+    level: string;
+    progress: number;
+    lessonsCompleted: number;
+    streak: number;
+  }>;
+};
 
 const ProfileScreen = () => {
-  const { width, height } = useWindowDimensions();
+  const { width } = useWindowDimensions();
   const isSmallScreen = width < 375;
 
-  const placeHolderUser: UserProfileData = {
-    name: "John Doe",
-    email: "johndoe@email.com",
-    avatarUrl: null,
-    streak: 0,
-    totalXp: 0,
-    lessonsCompleted: 0
-  }
-
-  // User data (would normally come from backend/context)
-  const [user, setUser] = useState(placeHolderUser);
-
+  const [user, setUser] = useState<UserProfileData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState(null);
-  const [buttonScale] = useState(new Animated.Value(1));
+  const [selectedLanguage, setSelectedLanguage] = useState<any>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
 
-  const getUserProfile = async () => {
-    const url = 'http://localhost:8080/api/user/profile?userId=0d2cd587-2926-4992-9441-6bbb2e6cbe4b';
-    const options = {
-      method: 'GET',
-      headers: {
-        Authorization: 'Bearer eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOiIwZDJjZDU4Ny0yOTI2LTQ5OTItOTQ0MS02YmJiMmU2Y2JlNGIiLCJzdWIiOiIwZDJjZDU4Ny0yOTI2LTQ5OTItOTQ0MS02YmJiMmU2Y2JlNGIiLCJpYXQiOjE3NTMyMDc4NTAsImV4cCI6MTc1MzI5NDI1MH0.NHRdCU8q1CtHbG_6LyXjfejo1Z5CUG7qin9P7m8LP6Y'
+
+  useEffect(() => {
+    const loadUserData = async () => {
+        try {
+          const storedUserId = await AsyncStorage.getItem("userId");
+          const storedToken = await AsyncStorage.getItem("accessToken");
+          setUserId(storedUserId);
+          setAccessToken(storedToken);
+        } catch (error) {
+          console.error("Failed to load user data:", error);
       }
     };
+      loadUserData();
+  }, []);
+  
 
+  const fetchUserProfile = async () => {
     try {
-      const response = await fetch(url, options);
-      if (response.status == 200) {
-        const data: UserProfileData = await response.json();
-        console.log(data);
-        setUser(data)
+      const response = await fetch(`http://localhost:8080/api/user/profile?userId=${userId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
 
+      if (!response.ok) {
+        throw new Error(`Failed to fetch profile: ${response.status}`);
       }
-    } catch (error) {
-      console.error(error);
+
+      const data: UserProfileData = await response.json();
+      setUser(data);
+      setError(null);
+    } catch (err) {
+      setError(err.message || 'Failed to load profile');
+      console.error('Profile fetch error:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
   };
 
+  useEffect(() => {
+    fetchUserProfile();
+  }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchUserProfile();
+  };
+
   const pickImage = async () => {
-    // Request permissions first
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission required', 'Sorry, we need camera roll permissions to make this work!');
+      Alert.alert('Permission required', 'We need camera roll permissions to change your avatar');
       return;
     }
 
-    let result = await ImagePicker.launchImageLibraryAsync({
+    const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
     });
 
-    if (!result.canceled && result.assets) {
-      setUser({ ...user, avatar: result.assets[0].uri });
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      await updateAvatar(result.assets[0].uri);
     }
     setModalVisible(false);
   };
 
-  const removeImage = () => {
-    setUser({ ...user, avatar: null });
+  const updateAvatar = async (uri: string) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', {
+        uri,
+        name: 'avatar.jpg',
+        type: 'image/jpeg'
+      } as any);
+
+      const response = await fetch('http://localhost:8080/api/user/avatar', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer YOUR_ACCESS_TOKEN',
+          'Content-Type': 'multipart/form-data'
+        },
+        body: formData
+      });
+
+      if (!response.ok) throw new Error('Avatar update failed');
+
+      const { avatarUrl } = await response.json();
+      setUser(prev => prev ? { ...prev, avatarUrl } : null);
+    } catch (err) {
+      Alert.alert('Error', 'Failed to update avatar');
+      console.error('Avatar update error:', err);
+    }
+  };
+
+  const removeAvatar = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/api/user/avatar', {
+        method: 'DELETE',
+        headers: {
+          'Authorization': 'Bearer YOUR_ACCESS_TOKEN'
+        }
+      });
+
+      if (!response.ok) throw new Error('Avatar removal failed');
+
+      setUser(prev => prev ? { ...prev, avatarUrl: null } : null);
+    } catch (err) {
+      Alert.alert('Error', 'Failed to remove avatar');
+      console.error('Avatar removal error:', err);
+    }
     setModalVisible(false);
   };
 
-  const showLanguageDetails = (language) => {
-    setSelectedLanguage(language);
-    setLanguageModalVisible(true);
-  };
+  if (loading && !refreshing) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#7f6edb" />
+      </View>
+    );
+  }
 
-  getUserProfile();
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Ionicons name="warning-outline" size={48} color="#ff6b6b" />
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={fetchUserProfile}>
+          <Text style={styles.retryButtonText}>Try Again</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (!user) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>No profile data available</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={fetchUserProfile}>
+          <Text style={styles.retryButtonText}>Refresh</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={[styles.scrollContainer, { minHeight: height }]}
+        contentContainerStyle={styles.scrollContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#7f6edb']}
+            tintColor="#7f6edb"
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         {/* Profile Card */}
         <View style={styles.profileCard}>
-          <TouchableOpacity
-            onPress={() => setModalVisible(true)}
-            activeOpacity={0.8}
-          >
+          <TouchableOpacity onPress={() => setModalVisible(true)} activeOpacity={0.8}>
             <View style={styles.avatarContainer}>
               {user.avatarUrl ? (
-                <Image
-                  source={{ uri: user.avatarUrl }}
-                  style={styles.avatar}
-                />
+                <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
               ) : (
                 <View style={styles.avatarPlaceholder}>
                   <Ionicons name="person" size={48} color="#7f6edb" />
@@ -134,7 +235,7 @@ const ProfileScreen = () => {
 
           <View style={styles.levelBadge}>
             <Ionicons name="ribbon" size={16} color="#fff" />
-            <Text style={styles.levelText}>{user.level} Learner</Text>
+            <Text style={styles.levelText}>{user.level || 'Beginner'} Learner</Text>
           </View>
         </View>
 
@@ -169,34 +270,39 @@ const ProfileScreen = () => {
         </View>
 
         {/* Learning Progress */}
-        {/* <View style={styles.section}>
-          <Text style={styles.sectionTitle}>My Languages</Text>
-          {user.learning.map((lang, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.languageCard}
-              onPress={() => showLanguageDetails(lang)}
-            >
-              <View style={styles.languageHeader}>
-                <Text style={styles.languageFlag}>{lang.flag}</Text>
-                <Text style={styles.languageName}>{lang.language}</Text>
-                <Text style={styles.languageLevel}>{lang.level}</Text>
-              </View>
-
-              <View style={styles.progressContainer}>
-                <View style={styles.progressBar}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      { width: `${lang.progress}%`, backgroundColor: '#7f6edb' }
-                    ]}
-                  />
+        {user.learning && user.learning.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>My Languages</Text>
+            {user.learning.map((lang, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.languageCard}
+                onPress={() => {
+                  setSelectedLanguage(lang);
+                  setLanguageModalVisible(true);
+                }}
+              >
+                <View style={styles.languageHeader}>
+                  <Text style={styles.languageFlag}>{lang.flag}</Text>
+                  <Text style={styles.languageName}>{lang.language}</Text>
+                  <Text style={styles.languageLevel}>{lang.level}</Text>
                 </View>
-                <Text style={styles.progressText}>{lang.progress}%</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View> */}
+
+                <View style={styles.progressContainer}>
+                  <View style={styles.progressBar}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        { width: `${lang.progress}%`, backgroundColor: '#7f6edb' }
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.progressText}>{lang.progress}%</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         {/* Word Bank Section */}
         <View style={styles.section}>
@@ -249,27 +355,16 @@ const ProfileScreen = () => {
             <Text style={styles.settingText}>Help & Support</Text>
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.settingItem}
-            onPress={() => router.push('/(root)/(tabs)/SettingsContainer/HelpAndSupport')}
-          >
-            <View style={styles.settingIcon}>
-              <Ionicons name="moon-outline" size={20} color="#7f6edb" />
-            </View>
-            <Text style={styles.settingText}>Dark Mode</Text>
-            <Ionicons name="chevron-forward" size={20} color="#ccc" />
-          </TouchableOpacity>
         </View>
 
-        {/* Spacer for bottom button */}
-        <View style={{ height: 100 }} />
+        {/* Bottom Spacer */}
+        <View style={{ height: 80 }} />
       </ScrollView>
 
       {/* Avatar Change Modal */}
       <Modal
         animationType="fade"
-        transparent={true}
+        transparent
         visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
       >
@@ -277,18 +372,15 @@ const ProfileScreen = () => {
           <View style={styles.modalContainer}>
             <Text style={styles.modalTitle}>Change Profile Photo</Text>
 
-            <TouchableOpacity
-              style={styles.modalOption}
-              onPress={pickImage}
-            >
+            <TouchableOpacity style={styles.modalOption} onPress={pickImage}>
               <Ionicons name="image-outline" size={22} color="#7f6edb" />
               <Text style={styles.modalOptionText}>Choose from Gallery</Text>
             </TouchableOpacity>
 
-            {user.avatar && (
+            {user.avatarUrl && (
               <TouchableOpacity
                 style={[styles.modalOption, { borderBottomWidth: 0 }]}
-                onPress={removeImage}
+                onPress={removeAvatar}
               >
                 <Ionicons name="trash-outline" size={22} color="#e74c3c" />
                 <Text style={[styles.modalOptionText, { color: '#e74c3c' }]}>Remove Current Photo</Text>
@@ -308,11 +400,11 @@ const ProfileScreen = () => {
       {/* Language Details Modal */}
       <Modal
         animationType="slide"
-        transparent={true}
+        transparent
         visible={languageModalVisible}
         onRequestClose={() => setLanguageModalVisible(false)}
       >
-        <View style={styles.languageModalOverlay}>
+        <View style={styles.modalOverlay}>
           <View style={styles.languageModalContainer}>
             {selectedLanguage && (
               <>
@@ -341,6 +433,16 @@ const ProfileScreen = () => {
                 <Text style={styles.languageLevelText}>
                   Current Level: <Text style={{ fontWeight: 'bold' }}>{selectedLanguage.level}</Text>
                 </Text>
+
+                <TouchableOpacity
+                  style={styles.languageContinueButton}
+                  onPress={() => {
+                    setLanguageModalVisible(false);
+                    router.push(`/learn/${selectedLanguage.language.toLowerCase()}`);
+                  }}
+                >
+                  <Text style={styles.languageContinueButtonText}>Continue Learning</Text>
+                </TouchableOpacity>
               </>
             )}
 
@@ -361,40 +463,58 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8f9fa',
-    top: '5%'
-
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#ff6b6b',
+    marginVertical: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#7f6edb',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: '600',
   },
   scrollContainer: {
-    paddingBottom: 120,
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    padding: 20,
+    paddingBottom: 80,
   },
   profileCard: {
     backgroundColor: '#fff',
     borderRadius: 20,
     padding: 24,
     alignItems: 'center',
-    shadowColor: '#7f6edb',
-    shadowOffset: { width: 0, height: 4 },
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-    marginBottom: 24,
+    shadowRadius: 6,
+    elevation: 3,
+    marginBottom: 20,
   },
   avatarContainer: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    borderWidth: 4,
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 3,
     backgroundColor: '#edeafd',
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
   },
   avatar: {
     width: '100%',
@@ -407,7 +527,6 @@ const styles = StyleSheet.create({
     borderRadius: 60,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#edeafd',
   },
   editBadge: {
     position: 'absolute',
@@ -453,10 +572,10 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 20,
     marginBottom: 20,
-    shadowColor: '#7f6edb',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
     elevation: 3,
   },
   sectionTitle: {
@@ -468,7 +587,6 @@ const styles = StyleSheet.create({
   statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
   },
   statItem: {
     alignItems: 'center',
@@ -565,7 +683,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    padding: 20,
   },
   modalContainer: {
     backgroundColor: '#fff',
@@ -604,19 +722,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#7f6edb',
   },
-  languageModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
   languageModalContainer: {
     backgroundColor: '#fff',
     borderRadius: 20,
     width: '100%',
     padding: 24,
-    alignItems: 'center',
   },
   languageModalHeader: {
     flexDirection: 'row',
@@ -635,7 +745,6 @@ const styles = StyleSheet.create({
   languageStatRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    width: '100%',
     marginBottom: 24,
   },
   languageStatItem: {
@@ -656,14 +765,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
     marginBottom: 24,
-    alignSelf: 'flex-start',
   },
   languageContinueButton: {
     backgroundColor: '#7f6edb',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
+    padding: 16,
     borderRadius: 12,
-    width: '100%',
     alignItems: 'center',
     marginBottom: 16,
   },
@@ -674,16 +780,13 @@ const styles = StyleSheet.create({
   },
   languageModalClose: {
     padding: 12,
-    backgroundColor: '#7f6edb',
-    borderRadius: 12,
     alignItems: 'center',
-    paddingHorizontal: 52,
   },
   languageModalCloseText: {
-    color: '#fff',
+    color: '#7f6edb',
     fontWeight: '600',
     fontSize: 16,
-  }
+  },
 });
 
 export default ProfileScreen;

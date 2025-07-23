@@ -1,6 +1,7 @@
-import {Ionicons} from '@expo/vector-icons';
-import {useRouter} from 'expo-router';
-import React, {useState} from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -14,7 +15,6 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const LoginScreen = () => {
     const router = useRouter();
@@ -51,6 +51,7 @@ const LoginScreen = () => {
     };
 
     const storeTokensAndData = async (userId: string, accessToken: string, refreshToken: string) => {
+        console.log('Storing tokens:', {userId, accessToken, refreshToken, rememberMe});
         try {
             await AsyncStorage.multiSet([
                 ['userId', userId],
@@ -60,6 +61,7 @@ const LoginScreen = () => {
             if (rememberMe) {
                 await AsyncStorage.setItem('rememberMe', 'true');
             }
+            console.log('Tokens stored successfully - ' + AsyncStorage.getItem('accessToken'));
         } catch (error) {
             console.error('Error storing tokens:', error);
         }

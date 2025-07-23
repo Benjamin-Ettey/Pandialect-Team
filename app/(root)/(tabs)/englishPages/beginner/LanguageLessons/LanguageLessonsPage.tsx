@@ -19,6 +19,7 @@ import {
 
 const { width, height } = Dimensions.get('window');
 
+// Type definitions
 type ExerciseType = 'translation' | 'multiple_choice' | 'matching';
 
 type Exercise = {
@@ -35,20 +36,17 @@ type Exercise = {
   pairs?: Record<string, string>;
 };
 
-type Lesson = {
-  id: string;
-  title: string;
-  xpReward: number;
-  exercises: Exercise[];
-};
+
+type ExerciseList = Exercise[];
 
 const LanguageLessonsPage = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { lang, level, lessonId } = params;
+  // Destructure lessonId, and assume lessonTitle and lessonXpReward are passed as params
+  const { lessonId, lessonTitle, lessonXpReward } = params;
 
   // State management
-  const [lesson, setLesson] = useState<Lesson | null>(null);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
@@ -64,15 +62,21 @@ const LanguageLessonsPage = () => {
   const [hearts, setHearts] = useState(3);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
 
-  const currentExercise = lesson?.exercises?.[currentExerciseIndex];
+  // Directly access exercises array
+  const currentExercise = exercises?.[currentExerciseIndex];
+
+  // Adjust progress calculation based on exercises array length
+  const progressPercent = exercises?.length
+    ? ((currentExerciseIndex + 1) / exercises.length) * 100
+    : 0;
+
   const progressWidth = progress.interpolate({
     inputRange: [0, 100],
-    outputRange: ['0%', `${lesson?.exercises?.length ?
-      ((currentExerciseIndex + 1) / lesson.exercises.length) * 100 : 0}%`]
+    outputRange: ['0%', '100%']
   });
 
   useEffect(() => {
-    const fetchLesson = async () => {
+    const fetchExercisesForLesson = async () => {
       try {
         setLoading(true);
         setError(null);
@@ -93,24 +97,30 @@ const LanguageLessonsPage = () => {
           }
         );
 
+        console.log("Exercise Response Status: " + response.status);
+
         if (!response.ok) {
-          throw new Error('Failed to fetch lesson');
+          throw new Error('Failed to fetch exercises for lesson');
         }
 
-        const data = await response.json();
-        setLesson(data);
+        const data: ExerciseList = await response.json(); // data is now Exercise[]
+
+        // Set the exercises array directly
+        setExercises(data);
+
       } catch (err) {
-        setError('Failed to load lesson. Please try again.');
-        console.error('Error fetching lesson:', err);
+        setLoading(false);
+        setError('Failed to load exercises. Please try again.');
+        console.error('Error fetching exercises:', err);
       } finally {
         setLoading(false);
       }
     };
 
     if (lessonId) {
-      fetchLesson();
+      fetchExercisesForLesson();
     }
-  }, [lessonId]);
+  }, [lessonId]); // Depend on lessonId
 
   const handleAnswerSelect = (answer: string) => {
     if (!currentExercise) return;
@@ -131,15 +141,23 @@ const LanguageLessonsPage = () => {
             [selectedMatch]: answer,
             [answer]: selectedMatch
           });
+          // After a successful match, if all pairs are matched, show next button
+          if (Object.keys(matchedPairs).length + 2 === Object.keys(currentExercise.pairs || {}).length * 2) {
+            setShowNextButton(true);
+          }
         } else {
           setHearts(prev => prev - 1);
+          // If hearts reach 0, you might want to end the lesson or go to a "game over" screen
         }
         setSelectedMatch(null);
       }
     } else {
       setSelectedAnswer(answer);
     }
-    setShowNextButton(true);
+    // For non-matching exercises, always show next button after selection
+    if (currentExercise.type !== 'matching') {
+      setShowNextButton(true);
+    }
   };
 
   const handleNext = () => {
@@ -148,12 +166,13 @@ const LanguageLessonsPage = () => {
     let correct = false;
 
     if (currentExercise.type === 'matching') {
+      // Check if all pairs are correctly matched
       correct = Object.entries(currentExercise.pairs || {}).every(
         ([key, value]) => matchedPairs[key] === value || matchedPairs[value] === key
       );
     } else if (currentExercise.type === 'multiple_choice') {
       correct = selectedAnswer === currentExercise.options?.[currentExercise.correctOptionIndex || 0];
-    } else {
+    } else { // Assuming 'translation' type
       correct = selectedAnswer === currentExercise.correctAnswer;
     }
 
@@ -165,21 +184,30 @@ const LanguageLessonsPage = () => {
       setStreak(prev => prev + 1);
     } else {
       setStreak(0);
+      setHearts(prev => prev - currentExercise.heartsCost); // Deduct hearts for incorrect answer
     }
   };
 
   const continueToNextExercise = () => {
     setShowFeedbackModal(false);
 
+    // Check if hearts are 0 after feedback, before moving to next exercise
+    if (hearts <= 0) {
+      // Handle game over or lesson failure
+      // For now, let's just go back to home or show a specific failure modal
+      router.push('/(root)/(tabs)/englishPages/beginner/HomepageTabs/home'); // Or a specific failure screen
+      return;
+    }
+
     Animated.timing(progress, {
-      toValue: lesson?.exercises?.length ?
-        ((currentExerciseIndex + 1) / lesson.exercises.length) * 100 : 0,
+      toValue: exercises?.length ?
+        ((currentExerciseIndex + 1) / exercises.length) * 100 : 0,
       duration: 500,
       easing: Easing.linear,
       useNativeDriver: false
     }).start();
 
-    if (lesson && currentExerciseIndex < lesson.exercises.length - 1) {
+    if (exercises && currentExerciseIndex < exercises.length - 1) {
       setCurrentExerciseIndex(currentExerciseIndex + 1);
       setSelectedAnswer(null);
       setShowNextButton(false);
@@ -194,10 +222,11 @@ const LanguageLessonsPage = () => {
   const completeLesson = async () => {
     try {
       const accessToken = await AsyncStorage.getItem('accessToken');
-      if (!accessToken || !lesson) return;
+      // Use lessonId from params, as 'lesson' state no longer holds it
+      if (!accessToken || !lessonId) return;
 
       await fetch(
-        `http://localhost:8080/api/lessons/${lesson.id}/complete`,
+        `http://localhost:8080/api/lessons/${lessonId}/complete`,
         {
           method: 'POST',
           headers: {
@@ -220,7 +249,7 @@ const LanguageLessonsPage = () => {
     if (!currentExercise) {
       return (
         <View style={styles.questionContainer}>
-          <Text>No exercise available</Text>
+          <Text>No exercise available at this index.</Text>
         </View>
       );
     }
@@ -238,12 +267,13 @@ const LanguageLessonsPage = () => {
                   style={[
                     styles.optionButton,
                     selectedAnswer === option && styles.selectedOption,
-                    selectedAnswer === option && isCorrect && styles.correctOption,
-                    selectedAnswer === option && !isCorrect && styles.incorrectOption
+                    // Apply correct/incorrect styling only after feedback is shown
+                    showFeedbackModal && selectedAnswer === option && isCorrect && styles.correctOption,
+                    showFeedbackModal && selectedAnswer === option && !isCorrect && styles.incorrectOption
                   ]}
                   onPress={() => handleAnswerSelect(option)}
                   activeOpacity={0.7}
-                  disabled={showFeedbackModal}
+                  disabled={showFeedbackModal} // Disable options after submission
                 >
                   <Text style={styles.optionText}>{option}</Text>
                 </TouchableOpacity>
@@ -256,24 +286,34 @@ const LanguageLessonsPage = () => {
         const leftItems = Object.keys(currentExercise.pairs || {});
         const rightItems = Object.values(currentExercise.pairs || {});
 
+        // Combine and shuffle items for display flexibility if needed,
+        // but for basic matching, keeping them separate might be fine.
+        // Ensure that order for pairs is not fixed visually unless intended.
+
+        // Filter out items already matched
+        const availableLeftItems = leftItems.filter(item => !matchedPairs[item]);
+        const availableRightItems = rightItems.filter(item => !Object.values(matchedPairs).includes(item));
+
         return (
           <View style={styles.questionContainer}>
             <Text style={styles.questionText}>{currentExercise.question}</Text>
             <View style={styles.matchColumns}>
               <View style={styles.matchColumn}>
-                {leftItems.map((item) => (
+                {leftItems.map((item) => ( // Render all items but disable matched ones
                   <TouchableOpacity
                     key={item}
                     style={[
                       styles.matchOption,
                       selectedMatch === item && styles.selectedMatch,
-                      matchedPairs[item] && styles.matchedOption,
+                      matchedPairs[item] && styles.matchedOption, // Matched state
+                      // Feedback styling for matched pairs (optional, based on UI needs)
                       showFeedbackModal && matchedPairs[item] && styles.correctOption,
-                      showFeedbackModal && !matchedPairs[item] && styles.incorrectOption
+                      // showFeedbackModal && !matchedPairs[item] && styles.incorrectOption // This might be tricky for partial matches
                     ]}
                     onPress={() => handleAnswerSelect(item)}
                     activeOpacity={0.7}
-                    disabled={showFeedbackModal || !!matchedPairs[item]}
+                    // Disable if feedback is showing or if already matched (either key or value side)
+                    disabled={showFeedbackModal || !!matchedPairs[item] || Object.values(matchedPairs).includes(item)}
                   >
                     <Text style={styles.optionText}>{item}</Text>
                     {matchedPairs[item] && (
@@ -283,22 +323,23 @@ const LanguageLessonsPage = () => {
                 ))}
               </View>
               <View style={styles.matchColumn}>
-                {rightItems.map((item) => (
+                {rightItems.map((item) => ( // Render all items but disable matched ones
                   <TouchableOpacity
                     key={item}
                     style={[
                       styles.matchOption,
                       selectedMatch === item && styles.selectedMatch,
-                      matchedPairs[item] && styles.matchedOption,
-                      showFeedbackModal && matchedPairs[item] && styles.correctOption,
-                      showFeedbackModal && !matchedPairs[item] && styles.incorrectOption
+                      Object.keys(matchedPairs).find(key => matchedPairs[key] === item) && styles.matchedOption, // Matched state
+                      // Feedback styling
+                      showFeedbackModal && Object.keys(matchedPairs).find(key => matchedPairs[key] === item) && styles.correctOption,
                     ]}
                     onPress={() => handleAnswerSelect(item)}
                     activeOpacity={0.7}
-                    disabled={showFeedbackModal || !!matchedPairs[item]}
+                    // Disable if feedback is showing or if already matched (either key or value side)
+                    disabled={showFeedbackModal || !!Object.keys(matchedPairs).find(key => matchedPairs[key] === item) || Object.keys(matchedPairs).includes(item)}
                   >
                     <Text style={styles.optionText}>{item}</Text>
-                    {matchedPairs[item] && (
+                    {Object.keys(matchedPairs).find(key => matchedPairs[key] === item) && (
                       <Ionicons name="checkmark" size={20} color="#58CC02" style={styles.matchCheck} />
                     )}
                   </TouchableOpacity>
@@ -311,7 +352,7 @@ const LanguageLessonsPage = () => {
       default:
         return (
           <View style={styles.questionContainer}>
-            <Text>Unknown exercise type</Text>
+            <Text>Unknown exercise type: {currentExercise.type}</Text>
           </View>
         );
     }
@@ -335,7 +376,7 @@ const LanguageLessonsPage = () => {
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity
             style={styles.retryButton}
-            onPress={() => router.back()}
+            onPress={() => router.back()} // Go back on error
           >
             <Text style={styles.retryButtonText}>Go Back</Text>
           </TouchableOpacity>
@@ -344,11 +385,12 @@ const LanguageLessonsPage = () => {
     );
   }
 
-  if (!lesson || !lesson.exercises?.length) {
+
+  if (!exercises || exercises.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.emptyContainer}>
-          <Text>This lesson has no exercises yet</Text>
+          <Text>This lesson has no exercises yet.</Text>
           <TouchableOpacity
             style={styles.retryButton}
             onPress={() => router.back()}
@@ -382,7 +424,8 @@ const LanguageLessonsPage = () => {
 
       {/* Lesson Content */}
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.lessonTitle}>{lesson.title}</Text>
+        {/* Use lessonTitle from params */}
+        <Text style={styles.lessonTitle}>{(lessonTitle as string) || "Loading Lesson..."}</Text>
         {renderExercise()}
       </ScrollView>
 
@@ -394,7 +437,7 @@ const LanguageLessonsPage = () => {
           activeOpacity={0.8}
         >
           <Text style={styles.nextButtonText}>
-            {currentExerciseIndex < lesson.exercises.length - 1 ? 'Next' : 'Finish'}
+            {currentExerciseIndex < exercises.length - 1 ? 'Next' : 'Finish'}
           </Text>
         </TouchableOpacity>
       )}
@@ -412,7 +455,7 @@ const LanguageLessonsPage = () => {
               color={isCorrect ? "#58CC02" : "#FF3B30"}
             />
             <Text style={styles.feedbackText}>
-              {isCorrect ? 'Correct!' : `Incorrect. ${currentExercise?.hint || ''}`}
+              {isCorrect ? 'Correct!' : `Incorrect. ${currentExercise?.hint || 'Try again!'}`}
             </Text>
             <TouchableOpacity
               style={styles.continueButton}
@@ -420,7 +463,7 @@ const LanguageLessonsPage = () => {
               activeOpacity={0.8}
             >
               <Text style={styles.continueButtonText}>
-                {currentExerciseIndex < lesson.exercises.length - 1 ? 'Continue' : 'Finish Lesson'}
+                {hearts <= 0 ? 'End Lesson' : (currentExerciseIndex < exercises.length - 1 ? 'Continue' : 'Finish Lesson')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -437,7 +480,7 @@ const LanguageLessonsPage = () => {
               resizeMode="contain"
             />
             <Text style={styles.completionTitle}>Lesson Complete!</Text>
-            <Text style={styles.completionSubtitle}>You've mastered {lesson.title}</Text>
+            <Text style={styles.completionSubtitle}>You've mastered {(lessonTitle as string) || "this lesson"}</Text>
 
             <View style={styles.statsContainer}>
               <View style={styles.statItem}>
@@ -450,7 +493,14 @@ const LanguageLessonsPage = () => {
               </View>
               <View style={styles.statItem}>
                 <Ionicons name="trophy" size={24} color="#58CC02" />
-                <Text style={styles.statText}>{lesson.xpReward} Total XP</Text>
+                {/* Use lessonXpReward from params for total XP */}
+                <Text style={styles.statText}>
+                  {Number(
+                    Array.isArray(lessonXpReward)
+                      ? lessonXpReward[0]
+                      : lessonXpReward ?? 0
+                  ) || 0} Total XP Possible
+                </Text>
               </View>
             </View>
 
@@ -620,7 +670,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 2,
     borderColor: 'transparent',
-    alignItems: 'center'
+    alignItems: 'center',
+    flexDirection: 'row', // To align checkmark
+    justifyContent: 'center'
   },
   selectedMatch: {
     borderColor: '#7f6edb',
@@ -633,7 +685,7 @@ const styles = StyleSheet.create({
   matchCheck: {
     position: 'absolute',
     right: 8,
-    top: 8
+    // top: 8, // Removed top so it aligns better vertically center if text is one line
   },
   modalContainer: {
     flex: 1,

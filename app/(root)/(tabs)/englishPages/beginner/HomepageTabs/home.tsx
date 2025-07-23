@@ -75,9 +75,8 @@ const HomeScreen: React.FC = () => {
 
         setLoadingLessons(true);
 
-        // const url = `http://localhost:8080/api/lessons?language=${selectedLang.name.toUpperCase()}&difficulty=${selectedLevel.name.toLowerCase()}`
         try {
-            const url = `http://localhost:8080/api/lessons?language=ENGLISH&difficulty=BEGINNER`;
+            const url = `http://localhost:8080/api/lessons?language=${selectedLang.name.toUpperCase()}&difficulty=${selectedLevel.name.toUpperCase()}`;
             const response = await fetch(url, {
                 method: 'GET',
                 headers: { Authorization: `Bearer ${accessToken}` }
