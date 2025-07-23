@@ -1,3 +1,5 @@
+import { apiFetch } from '@/utils/authUtils';
+import { BASE_API_URL } from '@/utils/consts';
 import { AntDesign, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -13,13 +15,13 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput, // Added TextInput for translation input
   TouchableOpacity,
   View
 } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
-// Type definitions
 type ExerciseType = 'translation' | 'multiple_choice' | 'matching';
 
 type Exercise = {
@@ -30,30 +32,37 @@ type Exercise = {
   order: number;
   xpReward: number;
   heartsCost: number;
-  correctAnswer?: string;
-  options?: string[];
-  correctOptionIndex?: number;
-  pairs?: Record<string, string>;
+  correctAnswer: string; // Universal correct answer string
+  options?: string[]; // Only for multiple_choice
+  pairs?: Record<string, string>; // Only for matching
 };
 
-
 type ExerciseList = Exercise[];
+
+const shuffleArray = <T,>(array: T[]): T[] => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
 
 const LanguageLessonsPage = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
-  // Destructure lessonId, and assume lessonTitle and lessonXpReward are passed as params
   const { lessonId, lessonTitle, lessonXpReward } = params;
 
-  // State management
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [showNextButton, setShowNextButton] = useState(false);
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-  const [isCorrect, setIsCorrect] = useState(false);
+  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null); // For MC and Translation (typed)
+  const [typedTranslation, setTypedTranslation] = useState<string>(''); // For translation input
+  const [showCheckButton, setShowCheckButton] = useState(false); // Controls "Check Answer" button visibility
+  const [showContinueButton, setShowContinueButton] = useState(false); // Controls "Continue" button visibility
+  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null); // On-screen feedback message
+  const [isCorrect, setIsCorrect] = useState(false); // Whether the last answer was correct
   const [xp, setXp] = useState(0);
   const [streak, setStreak] = useState(0);
   const [progress] = useState(new Animated.Value(0));
@@ -62,10 +71,8 @@ const LanguageLessonsPage = () => {
   const [hearts, setHearts] = useState(3);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
 
-  // Directly access exercises array
   const currentExercise = exercises?.[currentExerciseIndex];
 
-  // Adjust progress calculation based on exercises array length
   const progressPercent = exercises?.length
     ? ((currentExerciseIndex + 1) / exercises.length) * 100
     : 0;
@@ -74,6 +81,23 @@ const LanguageLessonsPage = () => {
     inputRange: [0, 100],
     outputRange: ['0%', '100%']
   });
+
+  // Effect to update button visibility based on input
+  useEffect(() => {
+    if (currentExercise?.type === 'translation') {
+      setShowCheckButton(typedTranslation.trim().length > 0 && !showContinueButton);
+    } else if (currentExercise?.type === 'multiple_choice') {
+      setShowCheckButton(selectedAnswer !== null && !showContinueButton);
+    } else if (currentExercise?.type === 'matching') {
+      // For matching, show check button when all pairs are matched
+      const allPairsMatched = Object.keys(currentExercise.pairs || {}).length > 0 &&
+        Object.keys(matchedPairs).length === Object.keys(currentExercise.pairs || {}).length * 2;
+      setShowCheckButton(allPairsMatched && !showContinueButton);
+    } else {
+      setShowCheckButton(false);
+    }
+  }, [typedTranslation, selectedAnswer, matchedPairs, currentExercise, showContinueButton]);
+
 
   useEffect(() => {
     const fetchExercisesForLesson = async () => {
@@ -86,8 +110,8 @@ const LanguageLessonsPage = () => {
           return;
         }
 
-        const response = await fetch(
-          `http://localhost:8080/api/exercises?lessonId=${lessonId}`,
+        const response = await apiFetch(
+          `${BASE_API_URL}/api/exercises?lessonId=${lessonId}`,
           {
             method: 'GET',
             headers: {
@@ -97,17 +121,13 @@ const LanguageLessonsPage = () => {
           }
         );
 
-        console.log("Exercise Response Status: " + response.status);
-
         if (!response.ok) {
           throw new Error('Failed to fetch exercises for lesson');
         }
 
-        const data: ExerciseList = await response.json(); // data is now Exercise[]
-
-        // Set the exercises array directly
-        setExercises(data);
-
+        const data: ExerciseList = await response.json();
+        console.log('Fetched exercises:', JSON.stringify(data, null, 2));
+        setExercises(shuffleArray(data));
       } catch (err) {
         setLoading(false);
         setError('Failed to load exercises. Please try again.');
@@ -120,88 +140,89 @@ const LanguageLessonsPage = () => {
     if (lessonId) {
       fetchExercisesForLesson();
     }
-  }, [lessonId]); // Depend on lessonId
+  }, [lessonId]);
 
   const handleAnswerSelect = (answer: string) => {
-    if (!currentExercise) return;
+    if (!currentExercise || showContinueButton) return; // Prevent selection after feedback is shown
 
     if (currentExercise.type === 'matching') {
       if (!selectedMatch) {
         setSelectedMatch(answer);
       } else {
-        const isPairValid = Object.entries(currentExercise.pairs || {}).some(
-          ([key, value]) =>
-            (key === selectedMatch && value === answer) ||
-            (value === selectedMatch && key === answer)
-        );
+        const normalizedPairs = Object.entries(currentExercise.pairs || {}).map(([key, value]) => {
+          return [key, value].sort().join(':');
+        });
+        const selectedPair = [selectedMatch, answer].sort().join(':');
+
+        const isPairValid = normalizedPairs.includes(selectedPair);
 
         if (isPairValid) {
-          setMatchedPairs({
-            ...matchedPairs,
+          setMatchedPairs(prev => ({
+            ...prev,
             [selectedMatch]: answer,
             [answer]: selectedMatch
-          });
-          // After a successful match, if all pairs are matched, show next button
-          if (Object.keys(matchedPairs).length + 2 === Object.keys(currentExercise.pairs || {}).length * 2) {
-            setShowNextButton(true);
-          }
+          }));
         } else {
-          setHearts(prev => prev - 1);
-          // If hearts reach 0, you might want to end the lesson or go to a "game over" screen
+          setHearts(prev => Math.max(prev - 1, 0));
         }
         setSelectedMatch(null);
       }
-    } else {
+    } else if (currentExercise.type === 'multiple_choice') {
       setSelectedAnswer(answer);
     }
-    // For non-matching exercises, always show next button after selection
-    if (currentExercise.type !== 'matching') {
-      setShowNextButton(true);
-    }
+    // Translation input handled by TextInput onChangeText
   };
 
-  const handleNext = () => {
+  const handleCheckAnswer = () => {
     if (!currentExercise) return;
 
     let correct = false;
+    let submittedAnswer: string | null = null;
 
-    if (currentExercise.type === 'matching') {
-      // Check if all pairs are correctly matched
-      correct = Object.entries(currentExercise.pairs || {}).every(
-        ([key, value]) => matchedPairs[key] === value || matchedPairs[value] === key
-      );
+    if (currentExercise.type === 'translation') {
+      submittedAnswer = typedTranslation;
+      correct = typedTranslation.trim().toLowerCase() === currentExercise.correctAnswer.trim().toLowerCase();
     } else if (currentExercise.type === 'multiple_choice') {
-      correct = selectedAnswer === currentExercise.options?.[currentExercise.correctOptionIndex || 0];
-    } else { // Assuming 'translation' type
-      correct = selectedAnswer === currentExercise.correctAnswer;
+      submittedAnswer = selectedAnswer;
+      correct = selectedAnswer?.trim().toLowerCase() === currentExercise.correctAnswer.trim().toLowerCase();
+    } else if (currentExercise.type === 'matching') {
+      const submittedPairsArray = Object.entries(matchedPairs)
+        .filter(([key, value]) => Object.keys(currentExercise.pairs || {}).includes(key))
+        .map(([key, value]) => `${key}:${value}`);
+      submittedAnswer = submittedPairsArray.sort().join(',');
+      correct = currentExercise.correctAnswer.toLowerCase() === submittedAnswer?.toLowerCase();
     }
 
     setIsCorrect(correct);
-    setShowFeedbackModal(true);
+    setFeedbackMessage(correct ? 'Correct!' : 'Incorrect.');
+    setShowContinueButton(true); // Show continue button after checking
 
     if (correct) {
       setXp(prev => prev + (currentExercise.xpReward || 0));
       setStreak(prev => prev + 1);
     } else {
       setStreak(0);
-      setHearts(prev => prev - currentExercise.heartsCost); // Deduct hearts for incorrect answer
+      setHearts(prev => Math.max(prev - currentExercise.heartsCost, 0));
     }
   };
 
   const continueToNextExercise = () => {
-    setShowFeedbackModal(false);
+    setFeedbackMessage(null); // Clear feedback
+    setShowContinueButton(false); // Hide continue button
+    setTypedTranslation(''); // Clear translation input
+    setSelectedAnswer(null); // Clear multiple choice selection
+    setMatchedPairs({}); // Clear matching pairs
+    setSelectedMatch(null); // Clear matching selection
 
-    // Check if hearts are 0 after feedback, before moving to next exercise
     if (hearts <= 0) {
-      // Handle game over or lesson failure
-      // For now, let's just go back to home or show a specific failure modal
-      router.push('/(root)/(tabs)/englishPages/beginner/HomepageTabs/home'); // Or a specific failure screen
+      router.push('/(root)/(tabs)/englishPages/beginner/HomepageTabs/home');
       return;
     }
 
     Animated.timing(progress, {
-      toValue: exercises?.length ?
-        ((currentExerciseIndex + 1) / exercises.length) * 100 : 0,
+      toValue: exercises?.length
+        ? ((currentExerciseIndex + 1) / exercises.length) * 100
+        : 0,
       duration: 500,
       easing: Easing.linear,
       useNativeDriver: false
@@ -209,10 +230,6 @@ const LanguageLessonsPage = () => {
 
     if (exercises && currentExerciseIndex < exercises.length - 1) {
       setCurrentExerciseIndex(currentExerciseIndex + 1);
-      setSelectedAnswer(null);
-      setShowNextButton(false);
-      setMatchedPairs({});
-      setSelectedMatch(null);
     } else {
       setShowCompletionModal(true);
       completeLesson();
@@ -222,11 +239,10 @@ const LanguageLessonsPage = () => {
   const completeLesson = async () => {
     try {
       const accessToken = await AsyncStorage.getItem('accessToken');
-      // Use lessonId from params, as 'lesson' state no longer holds it
       if (!accessToken || !lessonId) return;
 
-      await fetch(
-        `http://localhost:8080/api/lessons/${lessonId}/complete`,
+      await apiFetch(
+        `${BASE_API_URL}/api/lessons/${lessonId}/complete`,
         {
           method: 'POST',
           headers: {
@@ -247,73 +263,110 @@ const LanguageLessonsPage = () => {
 
   const renderExercise = () => {
     if (!currentExercise) {
+      console.log('No current exercise at index:', currentExerciseIndex);
       return (
         <View style={styles.questionContainer}>
-          <Text>No exercise available at this index.</Text>
+          <Text style={styles.errorText}>No exercise available at this index.</Text>
         </View>
       );
     }
 
+    console.log('Rendering exercise:', JSON.stringify(currentExercise, null, 2));
+
     switch (currentExercise.type) {
       case 'translation':
+        return (
+          <View style={styles.questionContainer}>
+            <Text style={styles.questionText}>{currentExercise.question}</Text>
+            <TextInput
+              style={[styles.translationInput, showContinueButton && (isCorrect ? styles.correctInput : styles.incorrectInput)]}
+              placeholder="Type your translation here"
+              value={typedTranslation}
+              onChangeText={setTypedTranslation}
+              editable={!showContinueButton} // Disable input after checking
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {feedbackMessage && !isCorrect && ( // Show hint/correct answer only if incorrect
+              <View style={styles.hintContainer}>
+                <Text style={styles.hintText}>Hint: {currentExercise.hint || 'No hint available.'}</Text>
+                <Text style={styles.correctAnswerText}>Correct Answer: {currentExercise.correctAnswer}</Text>
+              </View>
+            )}
+          </View>
+        );
+
       case 'multiple_choice':
+        if (!currentExercise.options || currentExercise.options.length === 0 || !currentExercise.correctAnswer) {
+          return (
+            <View style={styles.questionContainer}>
+              <Text style={styles.questionText}>{currentExercise.question}</Text>
+              <Text style={styles.errorText}>Error: Missing options or correct answer for this multiple-choice exercise.</Text>
+            </View>
+          );
+        }
         return (
           <View style={styles.questionContainer}>
             <Text style={styles.questionText}>{currentExercise.question}</Text>
             <View style={styles.optionsContainer}>
-              {currentExercise.options?.map((option, index) => (
+              {currentExercise.options.map((option, index) => (
                 <TouchableOpacity
                   key={index}
                   style={[
                     styles.optionButton,
                     selectedAnswer === option && styles.selectedOption,
-                    // Apply correct/incorrect styling only after feedback is shown
-                    showFeedbackModal && selectedAnswer === option && isCorrect && styles.correctOption,
-                    showFeedbackModal && selectedAnswer === option && !isCorrect && styles.incorrectOption
+                    // Show correct/incorrect feedback after answer submission
+                    showContinueButton && option === currentExercise.correctAnswer && styles.correctOption,
+                    showContinueButton && selectedAnswer === option && selectedAnswer !== currentExercise.correctAnswer && styles.incorrectOption
                   ]}
                   onPress={() => handleAnswerSelect(option)}
                   activeOpacity={0.7}
-                  disabled={showFeedbackModal} // Disable options after submission
+                  disabled={showContinueButton} // Disable options after checking
                 >
                   <Text style={styles.optionText}>{option}</Text>
                 </TouchableOpacity>
               ))}
             </View>
+            {feedbackMessage && !isCorrect && ( // Show hint/correct answer only if incorrect
+              <View style={styles.hintContainer}>
+                <Text style={styles.hintText}>Hint: {currentExercise.hint || 'No hint available.'}</Text>
+                <Text style={styles.correctAnswerText}>Correct Answer: {currentExercise.correctAnswer}</Text>
+              </View>
+            )}
           </View>
         );
 
       case 'matching':
-        const leftItems = Object.keys(currentExercise.pairs || {});
-        const rightItems = Object.values(currentExercise.pairs || {});
-
-        // Combine and shuffle items for display flexibility if needed,
-        // but for basic matching, keeping them separate might be fine.
-        // Ensure that order for pairs is not fixed visually unless intended.
-
-        // Filter out items already matched
-        const availableLeftItems = leftItems.filter(item => !matchedPairs[item]);
-        const availableRightItems = rightItems.filter(item => !Object.values(matchedPairs).includes(item));
+        if (!currentExercise.pairs || Object.keys(currentExercise.pairs).length === 0) {
+          return (
+            <View style={styles.questionContainer}>
+              <Text style={styles.questionText}>{currentExercise.question}</Text>
+              <Text style={styles.errorText}>Error: No pairs provided for this matching exercise.</Text>
+            </View>
+          );
+        }
+        const leftItems = shuffleArray(Object.keys(currentExercise.pairs));
+        const rightItems = shuffleArray(Object.values(currentExercise.pairs));
 
         return (
           <View style={styles.questionContainer}>
             <Text style={styles.questionText}>{currentExercise.question}</Text>
             <View style={styles.matchColumns}>
               <View style={styles.matchColumn}>
-                {leftItems.map((item) => ( // Render all items but disable matched ones
+                {leftItems.map((item) => (
                   <TouchableOpacity
                     key={item}
                     style={[
                       styles.matchOption,
                       selectedMatch === item && styles.selectedMatch,
-                      matchedPairs[item] && styles.matchedOption, // Matched state
-                      // Feedback styling for matched pairs (optional, based on UI needs)
-                      showFeedbackModal && matchedPairs[item] && styles.correctOption,
-                      // showFeedbackModal && !matchedPairs[item] && styles.incorrectOption // This might be tricky for partial matches
+                      // If this item is part of a correctly matched pair (after checking)
+                      showContinueButton && ((matchedPairs[item] && currentExercise.pairs?.[item] === matchedPairs[item]) || (Object.keys(currentExercise.pairs || {}).find(k => currentExercise.pairs?.[k] === item) && matchedPairs[Object.keys(currentExercise.pairs || {}).find(k => currentExercise.pairs?.[k] === item) || ''] === item)) && styles.correctOption,
+                      showContinueButton && selectedMatch === item && !isCorrect && styles.incorrectOption // Show incorrect if selected and overall answer is wrong
                     ]}
                     onPress={() => handleAnswerSelect(item)}
                     activeOpacity={0.7}
-                    // Disable if feedback is showing or if already matched (either key or value side)
-                    disabled={showFeedbackModal || !!matchedPairs[item] || Object.values(matchedPairs).includes(item)}
+                    // Disable if already matched or currently selected as the first part of a pair
+                    disabled={showContinueButton || !!matchedPairs[item] || Object.values(matchedPairs).includes(item) || (selectedMatch !== null && selectedMatch !== item)}
                   >
                     <Text style={styles.optionText}>{item}</Text>
                     {matchedPairs[item] && (
@@ -323,20 +376,20 @@ const LanguageLessonsPage = () => {
                 ))}
               </View>
               <View style={styles.matchColumn}>
-                {rightItems.map((item) => ( // Render all items but disable matched ones
+                {rightItems.map((item) => (
                   <TouchableOpacity
                     key={item}
                     style={[
                       styles.matchOption,
                       selectedMatch === item && styles.selectedMatch,
-                      Object.keys(matchedPairs).find(key => matchedPairs[key] === item) && styles.matchedOption, // Matched state
-                      // Feedback styling
-                      showFeedbackModal && Object.keys(matchedPairs).find(key => matchedPairs[key] === item) && styles.correctOption,
+                      // If this item is part of a correctly matched pair (after checking)
+                      showContinueButton && ((Object.keys(currentExercise.pairs || {}).find(k => currentExercise.pairs?.[k] === item) && matchedPairs[Object.keys(currentExercise.pairs || {}).find(k => currentExercise.pairs?.[k] === item) || ''] === item) || (matchedPairs[item] && currentExercise.pairs?.[matchedPairs[item]] === item)) && styles.correctOption,
+                      showContinueButton && selectedMatch === item && !isCorrect && styles.incorrectOption // Show incorrect if selected and overall answer is wrong
                     ]}
                     onPress={() => handleAnswerSelect(item)}
                     activeOpacity={0.7}
-                    // Disable if feedback is showing or if already matched (either key or value side)
-                    disabled={showFeedbackModal || !!Object.keys(matchedPairs).find(key => matchedPairs[key] === item) || Object.keys(matchedPairs).includes(item)}
+                    // Disable if already matched or currently selected as the first part of a pair
+                    disabled={showContinueButton || !!Object.keys(matchedPairs).find(key => matchedPairs[key] === item) || Object.keys(matchedPairs).includes(item) || (selectedMatch !== null && selectedMatch !== item)}
                   >
                     <Text style={styles.optionText}>{item}</Text>
                     {Object.keys(matchedPairs).find(key => matchedPairs[key] === item) && (
@@ -346,13 +399,19 @@ const LanguageLessonsPage = () => {
                 ))}
               </View>
             </View>
+            {feedbackMessage && !isCorrect && ( // Show hint/correct answer only if incorrect
+              <View style={styles.hintContainer}>
+                <Text style={styles.hintText}>Hint: {currentExercise.hint || 'No hint available.'}</Text>
+                <Text style={styles.correctAnswerText}>Correct Answer: {currentExercise.correctAnswer}</Text>
+              </View>
+            )}
           </View>
         );
 
       default:
         return (
           <View style={styles.questionContainer}>
-            <Text>Unknown exercise type: {currentExercise.type}</Text>
+            <Text style={styles.errorText}>Unknown exercise type: {currentExercise.type}</Text>
           </View>
         );
     }
@@ -376,7 +435,7 @@ const LanguageLessonsPage = () => {
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity
             style={styles.retryButton}
-            onPress={() => router.back()} // Go back on error
+            onPress={() => router.back()}
           >
             <Text style={styles.retryButtonText}>Go Back</Text>
           </TouchableOpacity>
@@ -384,7 +443,6 @@ const LanguageLessonsPage = () => {
       </SafeAreaView>
     );
   }
-
 
   if (!exercises || exercises.length === 0) {
     return (
@@ -404,7 +462,6 @@ const LanguageLessonsPage = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.heartsContainer}>
           {Array.from({ length: hearts }).map((_, i) => (
@@ -422,55 +479,55 @@ const LanguageLessonsPage = () => {
         </View>
       </View>
 
-      {/* Lesson Content */}
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Use lessonTitle from params */}
         <Text style={styles.lessonTitle}>{(lessonTitle as string) || "Loading Lesson..."}</Text>
         {renderExercise()}
       </ScrollView>
 
-      {/* Next Button */}
-      {showNextButton && (
+      {/* Feedback Section */}
+      {feedbackMessage && (
+        <View style={[styles.feedbackContainer, isCorrect ? styles.correctFeedback : styles.incorrectFeedback]}>
+          <View style={styles.feedbackIconAndText}>
+            <Ionicons
+              name={isCorrect ? "checkmark-circle" : "close-circle"}
+              size={30}
+              color={isCorrect ? "#FFFFFF" : "#FFFFFF"}
+            />
+            <Text style={styles.feedbackMessageText}>{feedbackMessage}</Text>
+          </View>
+          {!isCorrect && currentExercise?.hint && (
+            <Text style={styles.feedbackHintText}>Hint: {currentExercise.hint}</Text>
+          )}
+          {!isCorrect && (currentExercise?.type !== 'matching' || (currentExercise?.type === 'matching' && feedbackMessage === 'Incorrect.')) && (
+            <Text style={styles.feedbackCorrectAnswerText}>Correct: {currentExercise?.correctAnswer}</Text>
+          )}
+        </View>
+      )}
+
+      {/* Action Button: Check Answer or Continue */}
+      {showCheckButton && (
         <TouchableOpacity
-          style={styles.nextButton}
-          onPress={handleNext}
+          style={styles.actionButton}
+          onPress={handleCheckAnswer}
           activeOpacity={0.8}
         >
-          <Text style={styles.nextButtonText}>
-            {currentExerciseIndex < exercises.length - 1 ? 'Next' : 'Finish'}
+          <Text style={styles.actionButtonText}>Check Answer</Text>
+        </TouchableOpacity>
+      )}
+
+      {showContinueButton && (
+        <TouchableOpacity
+          style={[styles.actionButton, isCorrect ? styles.correctActionButton : styles.incorrectActionButton]}
+          onPress={continueToNextExercise}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.actionButtonText}>
+            {hearts <= 0 ? 'End Lesson' : (currentExerciseIndex < exercises.length - 1 ? 'Continue' : 'Finish Lesson')}
           </Text>
         </TouchableOpacity>
       )}
 
-      {/* Feedback Modal */}
-      <Modal visible={showFeedbackModal} transparent animationType="fade">
-        <View style={styles.modalContainer}>
-          <View style={[
-            styles.modalContent,
-            isCorrect ? styles.correctModal : styles.incorrectModal
-          ]}>
-            <Ionicons
-              name={isCorrect ? "checkmark-circle" : "close-circle"}
-              size={60}
-              color={isCorrect ? "#58CC02" : "#FF3B30"}
-            />
-            <Text style={styles.feedbackText}>
-              {isCorrect ? 'Correct!' : `Incorrect. ${currentExercise?.hint || 'Try again!'}`}
-            </Text>
-            <TouchableOpacity
-              style={styles.continueButton}
-              onPress={continueToNextExercise}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.continueButtonText}>
-                {hearts <= 0 ? 'End Lesson' : (currentExerciseIndex < exercises.length - 1 ? 'Continue' : 'Finish Lesson')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
-      {/* Completion Modal */}
       <Modal visible={showCompletionModal} transparent animationType="fade">
         <View style={styles.completionModalContainer}>
           <View style={styles.completionModalContent}>
@@ -493,7 +550,6 @@ const LanguageLessonsPage = () => {
               </View>
               <View style={styles.statItem}>
                 <Ionicons name="trophy" size={24} color="#58CC02" />
-                {/* Use lessonXpReward from params for total XP */}
                 <Text style={styles.statText}>
                   {Number(
                     Array.isArray(lessonXpReward)
@@ -515,7 +571,6 @@ const LanguageLessonsPage = () => {
         </View>
       </Modal>
 
-      {/* Streak Indicator */}
       {streak > 0 && (
         <View style={styles.streakContainer}>
           <Text style={styles.streakText}>🔥 Streak: {streak}</Text>
@@ -574,7 +629,7 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     padding: 24,
-    paddingBottom: 100
+    paddingBottom: 120 // Increased padding to make space for feedback/buttons
   },
   questionContainer: {
     marginBottom: 32
@@ -593,6 +648,28 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 28
   },
+  // New styles for Translation Input
+  translationInput: {
+    borderWidth: 2,
+    borderColor: '#E5E5E5',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 18,
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 16,
+    backgroundColor: '#FFFFFF'
+  },
+  correctInput: {
+    borderColor: '#58CC02',
+    backgroundColor: '#E8F5E9',
+  },
+  incorrectInput: {
+    borderColor: '#FF3B30',
+    backgroundColor: '#FFEBEE',
+  },
+  // End new styles for Translation Input
+
   optionsContainer: {
     marginBottom: 24
   },
@@ -604,6 +681,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent'
   },
+  // Removed wordOptionsContainer, wordCard, selectedWordCard, selectedWordsContainer
+  // as they are no longer used for translation input
+
   selectedOption: {
     backgroundColor: '#E0E0E0',
     borderColor: '#58CC02'
@@ -621,12 +701,13 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlign: 'center'
   },
-  nextButton: {
+  // Renamed nextButton to actionButton and added specific styles
+  actionButton: {
     position: 'absolute',
     bottom: 24,
     left: 24,
     right: 24,
-    backgroundColor: '#58CC02',
+    backgroundColor: '#7F5AED', // Default for "Check Answer"
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
@@ -637,10 +718,16 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3
   },
-  nextButtonText: {
+  actionButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: 'bold'
+  },
+  correctActionButton: {
+    backgroundColor: '#58CC02', // Green for "Continue" after correct answer
+  },
+  incorrectActionButton: {
+    backgroundColor: '#FF3B30', // Red for "Continue" after incorrect answer
   },
   streakContainer: {
     position: 'absolute',
@@ -671,12 +758,12 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent',
     alignItems: 'center',
-    flexDirection: 'row', // To align checkmark
+    flexDirection: 'row',
     justifyContent: 'center'
   },
   selectedMatch: {
-    borderColor: '#7f6edb',
-    backgroundColor: '#edeafd'
+    borderColor: '#7F5AED', // Updated color for consistency
+    backgroundColor: '#EDEAFD' // Light purple background
   },
   matchedOption: {
     borderColor: '#58CC02',
@@ -684,48 +771,78 @@ const styles = StyleSheet.create({
   },
   matchCheck: {
     position: 'absolute',
-    right: 8,
-    // top: 8, // Removed top so it aligns better vertically center if text is one line
+    right: 8
   },
-  modalContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  // Removed modalContainer, modalContent, correctModal, incorrectModal
+  // as feedback is now integrated on screen
+
+  // New feedback container styles
+  feedbackContainer: {
+    position: 'absolute',
+    bottom: 90, // Position above the action button
+    left: 0,
+    right: 0,
+    padding: 20,
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)'
+    justifyContent: 'center',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 5,
   },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
-    width: '80%',
-    alignItems: 'center'
+  correctFeedback: {
+    backgroundColor: '#58CC02', // Green for correct
   },
-  correctModal: {
-    borderTopWidth: 8,
-    borderTopColor: '#58CC02'
+  incorrectFeedback: {
+    backgroundColor: '#FF3B30', // Red for incorrect
   },
-  incorrectModal: {
-    borderTopWidth: 8,
-    borderTopColor: '#FF3B30'
+  feedbackIconAndText: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  feedbackText: {
-    fontSize: 20,
+  feedbackMessageText: {
+    color: '#FFFFFF',
+    fontSize: 24,
     fontWeight: 'bold',
-    marginVertical: 16,
-    textAlign: 'center'
+    marginLeft: 10,
   },
-  continueButton: {
-    backgroundColor: '#58CC02',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    marginTop: 8
+  feedbackHintText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 5,
   },
-  continueButtonText: {
+  feedbackCorrectAnswerText: {
     color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: 'bold'
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
+  hintContainer: {
+    marginTop: 15,
+    padding: 10,
+    backgroundColor: '#F0F0F0',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  hintText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 5,
+  },
+  correctAnswerText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    textAlign: 'center',
+  },
+  // End new feedback container styles
+
   completionModalContainer: {
     flex: 1,
     justifyContent: 'center',

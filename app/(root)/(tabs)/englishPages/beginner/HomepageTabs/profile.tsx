@@ -1,20 +1,22 @@
+import { apiFetch } from '@/utils/authUtils';
+import { BASE_API_URL } from '@/utils/consts';
 import { Feather, FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Modal,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   useWindowDimensions,
-  View,
-  ActivityIndicator,
-  RefreshControl
+  View
 } from 'react-native';
 
 type UserProfileData = {
@@ -68,7 +70,7 @@ const ProfileScreen = () => {
 
   const fetchUserProfile = async () => {
     try {
-      const response = await fetch(`http://localhost:8080/api/user/profile?userId=${userId}`, {
+      const response = await apiFetch(`${BASE_API_URL}/api/user/profile?userId=${userId}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -93,8 +95,10 @@ const ProfileScreen = () => {
   };
 
   useEffect(() => {
-    fetchUserProfile();
-  }, []);
+    if (accessToken && userId) {
+      fetchUserProfile();
+    }
+  }, [accessToken, userId]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -130,7 +134,7 @@ const ProfileScreen = () => {
         type: 'image/jpeg'
       } as any);
 
-      const response = await fetch('http://localhost:8080/api/user/avatar', {
+      const response = await apiFetch(`${BASE_API_URL}/api/user/avatar`, {
         method: 'POST',
         headers: {
           'Authorization': 'Bearer YOUR_ACCESS_TOKEN',
@@ -151,7 +155,7 @@ const ProfileScreen = () => {
 
   const removeAvatar = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/user/avatar', {
+      const response = await apiFetch(`${BASE_API_URL}/api/user/avatar`, {
         method: 'DELETE',
         headers: {
           'Authorization': 'Bearer YOUR_ACCESS_TOKEN'

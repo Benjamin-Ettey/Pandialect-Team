@@ -1,3 +1,5 @@
+import { apiFetch } from '@/utils/authUtils';
+import { BASE_API_URL } from '@/utils/consts';
 import { FontAwesome, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
@@ -49,8 +51,8 @@ const LeaderboardScreen = () => {
       const accessToken = await AsyncStorage.getItem('accessToken');
       if (!accessToken) return;
 
-      const response = await fetch(
-        `http://localhost:8080/api/leaderboard?timeframe=${timeframe}`,
+      const response = await apiFetch(
+        `${BASE_API_URL}/api/leaderboard?timeframe=${timeframe}`,
         {
           method: 'GET',
           headers: {

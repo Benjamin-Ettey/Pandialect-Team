@@ -1,3 +1,5 @@
+import { apiFetch } from '@/utils/authUtils';
+import { BASE_API_URL } from '@/utils/consts';
 import { getAlphabetTitle, LanguageCode } from '@/utils/language';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -49,7 +51,7 @@ type AlphabetDetailCharacter = {
   difficulty?: 'easy' | 'medium' | 'hard';
 };
 
-const API_BASE_URL = 'http://localhost:8080/api/alphabets';
+const API_BASE_URL = `${BASE_API_URL}/api/alphabets`;
 
 const Progress = () => {
   const router = useRouter();
@@ -69,12 +71,9 @@ const Progress = () => {
 
 
   useEffect(() => {
-    console.log('Progress screen mounted with params:', { lang, level });
-    console.log('Getting access token from AsyncStorage...');
     const loadUserData = async () => {
       try {
         const storedToken = await AsyncStorage.getItem('accessToken');
-        console.log('Access token loaded:', storedToken);
         setAccessToken(storedToken);
       } catch (error) {
         console.error("Failed to load user data:", error);
@@ -88,10 +87,9 @@ const Progress = () => {
     if (!accessToken) return; 
 
     const fetchAlphabetList = async () => {
-      console.log("Access token:", accessToken);
       try {
         setLoading(true);
-        const response = await fetch(`${API_BASE_URL}/list?lang=${languageCode}`,{
+        const response = await apiFetch(`${API_BASE_URL}/list?lang=${languageCode}`,{
             method: 'GET',
             headers: {Authorization: `Bearer ${accessToken}`}
           }
@@ -119,7 +117,7 @@ const Progress = () => {
   const handleCharacterPress = async (char: AlphabetListCharacter) => {
     try {
       setLoadingDetails(true);
-      const response = await fetch(`${API_BASE_URL}/${char.id}`, {
+      const response = await apiFetch(`${API_BASE_URL}/${char.id}`, {
           method: 'GET',
           headers: { Authorization: `Bearer ${accessToken}` }
         }

@@ -4,6 +4,8 @@ import LessonList from '@/components/Home/LessonList';
 import LevelModal from '@/components/Home/LevelModal';
 import StartLessonModal from '@/components/Home/StartLessonModal';
 import { Language, LANGUAGES, Lesson, Level, LEVELS } from '@/components/Home/types';
+import { apiFetch } from '@/utils/authUtils';
+import { BASE_API_URL } from '@/utils/consts';
 import { getLessonImage } from '@/utils/lessonIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
@@ -54,8 +56,8 @@ const HomeScreen: React.FC = () => {
         if (!userId || !accessToken) return;
 
         try {
-            const url = `http://localhost:8080/api/user/languages?userId=${userId}`;
-            const response = await fetch(url, {
+            const url = `${BASE_API_URL}/api/user/languages?userId=${userId}`;
+            const response = await apiFetch(url, {
                 method: 'GET',
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
@@ -76,8 +78,8 @@ const HomeScreen: React.FC = () => {
         setLoadingLessons(true);
 
         try {
-            const url = `http://localhost:8080/api/lessons?language=${selectedLang.name.toUpperCase()}&difficulty=${selectedLevel.name.toUpperCase()}`;
-            const response = await fetch(url, {
+            const url = `${BASE_API_URL}/api/lessons?language=${selectedLang.name.toUpperCase()}&difficulty=${selectedLevel.name.toUpperCase()}`;
+            const response = await apiFetch(url, {
                 method: 'GET',
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
@@ -89,7 +91,6 @@ const HomeScreen: React.FC = () => {
                     route: lesson.title.toLowerCase().replace(/\s+/g, '-'),
                     image: getLessonImage(lesson.title)
                 }));
-                console.log("Fetched lessons:", formattedLessons);
                 setLessons(formattedLessons);
             } else {
                 setLessons([]);

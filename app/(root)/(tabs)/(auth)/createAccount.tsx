@@ -1,6 +1,8 @@
-import {Ionicons} from '@expo/vector-icons';
-import {useLocalSearchParams, useRouter} from 'expo-router';
-import React, {useState} from 'react';
+import { BASE_API_URL } from '@/utils/consts';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -14,7 +16,6 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SOCIAL_LOGINS = [
     {id: 'google', icon: require('../../../../assets/images/google.png')},
@@ -105,7 +106,7 @@ const SignUpScreen = () => {
         if (isNameValid && isEmailValid && isPasswordValid && isAgeValid) {
             setLoading(true);
             try {
-                const response = await fetch('http://localhost:8080/api/auth/register', {
+                const response = await fetch(`${BASE_API_URL}/api/auth/register`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -126,7 +127,7 @@ const SignUpScreen = () => {
                     // Start a login process on successful signup
                     try {
                         // Replace this with your actual API call
-                        const response = await fetch('http://localhost:8080/api/auth/login', {
+                        const response = await fetch(`${BASE_API_URL}/api/auth/login`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -141,7 +142,6 @@ const SignUpScreen = () => {
                             // Login successful
                             // Store tokens and user id in AsyncStorage on successful login
                             let data: LoginResponse = await response.json();
-                            console.log(data)
                             await storeTokensAndData(data.userId, data.accessToken, data.refreshToken);
 
                             // Navigate to home page next

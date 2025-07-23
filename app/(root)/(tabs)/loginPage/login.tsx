@@ -1,3 +1,4 @@
+import { BASE_API_URL } from '@/utils/consts';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
@@ -51,7 +52,6 @@ const LoginScreen = () => {
     };
 
     const storeTokensAndData = async (userId: string, accessToken: string, refreshToken: string) => {
-        console.log('Storing tokens:', {userId, accessToken, refreshToken, rememberMe});
         try {
             await AsyncStorage.multiSet([
                 ['userId', userId],
@@ -61,7 +61,6 @@ const LoginScreen = () => {
             if (rememberMe) {
                 await AsyncStorage.setItem('rememberMe', 'true');
             }
-            console.log('Tokens stored successfully - ' + AsyncStorage.getItem('accessToken'));
         } catch (error) {
             console.error('Error storing tokens:', error);
         }
@@ -75,7 +74,7 @@ const LoginScreen = () => {
             setLoading(true);
             try {
                 // Replace this with your actual API call
-                const response = await fetch('http://localhost:8080/api/auth/login', {
+                const response = await fetch(`${BASE_API_URL}/api/auth/login`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
