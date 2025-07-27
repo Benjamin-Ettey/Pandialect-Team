@@ -104,17 +104,24 @@ const HomeScreen: React.FC = () => {
     };
 
     const handleStartLesson = () => {
-        setModalVisible(false);
+        setModalVisible(false); // Close the StartLessonModal immediately
         if (selectedLesson) {
-            setFetchingLesson(true);
+            setFetchingLesson(true); // Indicate that a lesson fetch is in progress (for this modal)
+            console.log('HomeScreen: Navigating to LanguageLessonsPage with lessonId:', selectedLesson.id);
             router.push({
                 pathname: '/(root)/(tabs)/englishPages/beginner/LanguageLessons/LanguageLessonsPage',
                 params: {
                     lang: selectedLang.code,
                     level: selectedLevel.code,
                     lessonId: selectedLesson.id,
+                    lessonTitle: selectedLesson.title, // Pass title for display
+                    lessonXpReward: selectedLesson.xpReward, // Pass XP for display
                 },
-            });;
+            });
+            // Crucial: Reset fetchingLesson AFTER navigation is initiated.
+            // This ensures the StartLessonModal closes. The LanguageLessonsPage will
+            // handle its own loading state.
+            setFetchingLesson(false);
         }
     };
 

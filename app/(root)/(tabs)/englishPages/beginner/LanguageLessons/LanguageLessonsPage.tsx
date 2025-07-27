@@ -15,7 +15,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput, // Added TextInput for translation input
+  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
@@ -23,6 +23,15 @@ import {
 const { width, height } = Dimensions.get('window');
 
 type ExerciseType = 'translation' | 'multiple_choice' | 'matching';
+
+// Define a type for individual items in a matching exercise
+type MatchItem = {
+  id: string; // Unique ID for the item (e.g., 'left-hello', 'right-bonjour')
+  value: string; // The text to display for the item
+  side: 'left' | 'right'; // Indicates which column it belongs to
+  originalKey?: string; // Stores the original key from `pairs` for left-side items
+  originalValue?: string; // Stores the original value from `pairs` for right-side items
+};
 
 type Exercise = {
   id: string;
@@ -66,10 +75,18 @@ const LanguageLessonsPage = () => {
   const [xp, setXp] = useState(0);
   const [streak, setStreak] = useState(0);
   const [progress] = useState(new Animated.Value(0));
+  // matchedPairs now stores IDs of matched items: { itemId1: itemId2, itemId2: itemId1 }
   const [matchedPairs, setMatchedPairs] = useState<Record<string, string>>({});
+  // selectedMatch now stores the ID of the first selected item
   const [selectedMatch, setSelectedMatch] = useState<string | null>(null);
+  // New state to temporarily store IDs of incorrectly matched items for visual feedback
+  const [incorrectlyMatchedPair, setIncorrectlyMatchedPair] = useState<string[]>([]);
   const [hearts, setHearts] = useState(3);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
+
+  // States to hold the shuffled MatchItem objects for matching exercises, ensuring stable order
+  const [shuffledLeftMatchItems, setShuffledLeftMatchItems] = useState<MatchItem[]>([]);
+  const [shuffledRightMatchItems, setShuffledRightMatchItems] = useState<MatchItem[]>([]);
 
   const currentExercise = exercises?.[currentExerciseIndex];
 
@@ -89,27 +106,84 @@ const LanguageLessonsPage = () => {
     } else if (currentExercise?.type === 'multiple_choice') {
       setShowCheckButton(selectedAnswer !== null && !showContinueButton);
     } else if (currentExercise?.type === 'matching') {
-      // For matching, show check button when all pairs are matched
-      const allPairsMatched = Object.keys(currentExercise.pairs || {}).length > 0 &&
-        Object.keys(matchedPairs).length === Object.keys(currentExercise.pairs || {}).length * 2;
-      setShowCheckButton(allPairsMatched && !showContinueButton);
+      // For matching, show check button when all original left items have a matched right item
+      const allOriginalPairsMatched = Object.keys(currentExercise.pairs || {}).length > 0 &&
+        Object.keys(currentExercise.pairs || {}).every(key => {
+          // Check if the original left item's ID has a corresponding match in matchedPairs
+          const leftItemId = `left-${key}`;
+          return !!matchedPairs[leftItemId];
+        });
+      setShowCheckButton(allOriginalPairsMatched && !showContinueButton);
     } else {
       setShowCheckButton(false);
     }
   }, [typedTranslation, selectedAnswer, matchedPairs, currentExercise, showContinueButton]);
 
-
+  // Effect to prepare and shuffle matching items only once when a new matching exercise loads
   useEffect(() => {
+    if (currentExercise && currentExercise.type === 'matching' && currentExercise.pairs) {
+      // Create MatchItem objects for left side
+      const leftItemsData: MatchItem[] = Object.keys(currentExercise.pairs).map(key => ({
+        id: `left-${key}`, // Unique ID for left item
+        value: key,
+        side: 'left',
+        originalKey: key
+      }));
+      // Create MatchItem objects for right side
+      const rightItemsData: MatchItem[] = Object.values(currentExercise.pairs).map(value => ({
+        id: `right-${value}`, // Unique ID for right item
+        value: value,
+        side: 'right',
+        originalValue: value
+      }));
+
+      setShuffledLeftMatchItems(shuffleArray(leftItemsData));
+      setShuffledRightMatchItems(shuffleArray(rightItemsData));
+      setMatchedPairs({}); // Clear matched pairs for the new exercise
+      setSelectedMatch(null); // Clear selected match for the new exercise
+      setIncorrectlyMatchedPair([]); // Clear any incorrect highlights
+    }
+  }, [currentExerciseIndex, currentExercise]); // Re-run when exercise changes
+
+  // Effect to fetch exercises for the lesson
+  useEffect(() => {
+    console.log('LanguageLessonsPage: useEffect triggered. Current lessonId:', lessonId);
+
+    // --- Aggressive State Reset for a new lesson ---
+    setLoading(true); // Always set loading to true at the start of a new fetch
+    setError(null);    // Clear any previous errors
+    setExercises([]);  // Clear previous exercises data
+    setCurrentExerciseIndex(0); // Reset exercise index to start from the first exercise
+    setSelectedAnswer(null); // Clear any previous selections
+    setTypedTranslation(''); // Clear translation input
+    setShowCheckButton(false); // Reset button visibility
+    setShowContinueButton(false); // Reset button visibility
+    setFeedbackMessage(null); // Clear feedback
+    setIsCorrect(false); // Reset correctness
+    setMatchedPairs({}); // Clear matching specific states
+    setSelectedMatch(null);
+    setIncorrectlyMatchedPair([]);
+    setHearts(3); // Reset hearts for a new lesson start
+    // --- End Aggressive State Reset ---
+
     const fetchExercisesForLesson = async () => {
+      console.log('LanguageLessonsPage: fetchExercisesForLesson function executed.');
       try {
-        setLoading(true);
-        setError(null);
         const accessToken = await AsyncStorage.getItem('accessToken');
         if (!accessToken) {
+          console.log('LanguageLessonsPage: No access token found, redirecting to login.');
           router.push('/login');
           return;
         }
 
+        if (!lessonId) {
+          console.warn('LanguageLessonsPage: lessonId is undefined, cannot fetch exercises.');
+          setLoading(false);
+          setError('Lesson ID is missing. Please go back and select a lesson.');
+          return;
+        }
+
+        console.log(`LanguageLessonsPage: Fetching exercises from: ${BASE_API_URL}/api/exercises?lessonId=${lessonId}`);
         const response = await apiFetch(
           `${BASE_API_URL}/api/exercises?lessonId=${lessonId}`,
           {
@@ -122,53 +196,86 @@ const LanguageLessonsPage = () => {
         );
 
         if (!response.ok) {
-          throw new Error('Failed to fetch exercises for lesson');
+          const errorData = await response.json();
+          console.error('LanguageLessonsPage: Failed to fetch exercises, server response:', errorData);
+          throw new Error(errorData.message || 'Failed to fetch exercises for lesson');
         }
 
         const data: ExerciseList = await response.json();
-        console.log('Fetched exercises:', JSON.stringify(data, null, 2));
+        console.log('LanguageLessonsPage: Successfully fetched exercises:', data.length, 'items.');
         setExercises(shuffleArray(data));
-      } catch (err) {
-        setLoading(false);
-        setError('Failed to load exercises. Please try again.');
-        console.error('Error fetching exercises:', err);
+      } catch (err: any) {
+        console.error('LanguageLessonsPage: Error during fetchExercisesForLesson:', err);
+        setError(err.message || 'Failed to load exercises. Please try again.');
       } finally {
+        console.log('LanguageLessonsPage: fetchExercisesForLesson finally block: setting loading to false.');
         setLoading(false);
       }
     };
 
     if (lessonId) {
       fetchExercisesForLesson();
+    } else {
+      // If lessonId is not available initially (e.g., direct navigation without params)
+      setLoading(false);
+      setError('No lesson selected. Please go back to the home page and choose a lesson.');
+      console.log('LanguageLessonsPage: lessonId is null or undefined on initial load, stopping loading.');
     }
-  }, [lessonId]);
+  }, [lessonId, router]); // Depend on lessonId and router for re-fetching and navigation
 
-  const handleAnswerSelect = (answer: string) => {
+
+  // handleAnswerSelect now takes a MatchItem object
+  const handleAnswerSelect = (item: MatchItem) => {
     if (!currentExercise || showContinueButton) return; // Prevent selection after feedback is shown
 
     if (currentExercise.type === 'matching') {
       if (!selectedMatch) {
-        setSelectedMatch(answer);
+        // First selection: store the ID of the selected item
+        setSelectedMatch(item.id);
       } else {
-        const normalizedPairs = Object.entries(currentExercise.pairs || {}).map(([key, value]) => {
-          return [key, value].sort().join(':');
-        });
-        const selectedPair = [selectedMatch, answer].sort().join(':');
+        // Second selection: attempt to match
+        const firstSelectedItem = [...shuffledLeftMatchItems, ...shuffledRightMatchItems].find(
+          (matchItem) => matchItem.id === selectedMatch
+        );
+        const secondSelectedItem = item;
 
-        const isPairValid = normalizedPairs.includes(selectedPair);
+        // Prevent matching an item with itself or an item from the same side
+        if (!firstSelectedItem || firstSelectedItem.id === secondSelectedItem.id || firstSelectedItem.side === secondSelectedItem.side) {
+          setSelectedMatch(null); // Reset selection if invalid
+          return;
+        }
 
-        if (isPairValid) {
+        let isMatch = false;
+
+        // Determine if the selected pair forms a correct match based on original pairs
+        if (firstSelectedItem.side === 'left' && secondSelectedItem.side === 'right') {
+          if (currentExercise.pairs?.[firstSelectedItem.value] === secondSelectedItem.value) {
+            isMatch = true;
+          }
+        } else if (firstSelectedItem.side === 'right' && secondSelectedItem.side === 'left') {
+          if (currentExercise.pairs?.[secondSelectedItem.value] === firstSelectedItem.value) {
+            isMatch = true;
+          }
+        }
+
+        if (isMatch) {
           setMatchedPairs(prev => ({
             ...prev,
-            [selectedMatch]: answer,
-            [answer]: selectedMatch
+            [firstSelectedItem.id]: secondSelectedItem.id,
+            [secondSelectedItem.id]: firstSelectedItem.id // Store both directions for easier lookup and styling
           }));
         } else {
           setHearts(prev => Math.max(prev - 1, 0));
+          // Highlight the incorrectly matched pair temporarily
+          setIncorrectlyMatchedPair([firstSelectedItem.id, secondSelectedItem.id]);
+          setTimeout(() => {
+            setIncorrectlyMatchedPair([]); // Clear highlight after a short delay
+          }, 700); // Highlight for 700ms
         }
-        setSelectedMatch(null);
+        setSelectedMatch(null); // Clear selectedMatch after attempting a pair
       }
     } else if (currentExercise.type === 'multiple_choice') {
-      setSelectedAnswer(answer);
+      setSelectedAnswer(item.value); // For MC, item.value is the answer string
     }
     // Translation input handled by TextInput onChangeText
   };
@@ -186,11 +293,29 @@ const LanguageLessonsPage = () => {
       submittedAnswer = selectedAnswer;
       correct = selectedAnswer?.trim().toLowerCase() === currentExercise.correctAnswer.trim().toLowerCase();
     } else if (currentExercise.type === 'matching') {
-      const submittedPairsArray = Object.entries(matchedPairs)
-        .filter(([key, value]) => Object.keys(currentExercise.pairs || {}).includes(key))
-        .map(([key, value]) => `${key}:${value}`);
-      submittedAnswer = submittedPairsArray.sort().join(',');
-      correct = currentExercise.correctAnswer.toLowerCase() === submittedAnswer?.toLowerCase();
+      const expectedPairs = currentExercise.pairs || {};
+      let allPairsCorrectAndComplete = true;
+
+      // Check if every expected left item has been correctly matched
+      Object.keys(expectedPairs).forEach(leftOriginalValue => {
+        const expectedRightOriginalValue = expectedPairs[leftOriginalValue];
+        const leftItemId = `left-${leftOriginalValue}`;
+        const rightItemId = `right-${expectedRightOriginalValue}`;
+
+        // If the left item is not in matchedPairs, or its matched value is incorrect
+        if (!matchedPairs[leftItemId] || matchedPairs[leftItemId] !== rightItemId) {
+          allPairsCorrectAndComplete = false;
+        }
+      });
+
+      // Also ensure no extra incorrect pairs were made (by checking total matched pairs count)
+      // Since we store A:B and B:A, the count should be double the original pairs count
+      if (Object.keys(matchedPairs).length !== Object.keys(expectedPairs).length * 2) {
+        allPairsCorrectAndComplete = false;
+      }
+
+      correct = allPairsCorrectAndComplete;
+      submittedAnswer = JSON.stringify(matchedPairs); // For debugging/logging
     }
 
     setIsCorrect(correct);
@@ -211,8 +336,9 @@ const LanguageLessonsPage = () => {
     setShowContinueButton(false); // Hide continue button
     setTypedTranslation(''); // Clear translation input
     setSelectedAnswer(null); // Clear multiple choice selection
-    setMatchedPairs({}); // Clear matching pairs
-    setSelectedMatch(null); // Clear matching selection
+    setMatchedPairs({}); // Clear matching pairs for the next exercise
+    setSelectedMatch(null); // Clear matching selection for the next exercise
+    setIncorrectlyMatchedPair([]); // Clear any incorrect highlights
 
     if (hearts <= 0) {
       router.push('/(root)/(tabs)/englishPages/beginner/HomepageTabs/home');
@@ -319,7 +445,7 @@ const LanguageLessonsPage = () => {
                     showContinueButton && option === currentExercise.correctAnswer && styles.correctOption,
                     showContinueButton && selectedAnswer === option && selectedAnswer !== currentExercise.correctAnswer && styles.incorrectOption
                   ]}
-                  onPress={() => handleAnswerSelect(option)}
+                  onPress={() => handleAnswerSelect({ id: option, value: option, side: 'left' })} // Pass a dummy MatchItem for MC
                   activeOpacity={0.7}
                   disabled={showContinueButton} // Disable options after checking
                 >
@@ -345,54 +471,62 @@ const LanguageLessonsPage = () => {
             </View>
           );
         }
-        const leftItems = shuffleArray(Object.keys(currentExercise.pairs));
-        const rightItems = shuffleArray(Object.values(currentExercise.pairs));
 
         return (
           <View style={styles.questionContainer}>
             <Text style={styles.questionText}>{currentExercise.question}</Text>
             <View style={styles.matchColumns}>
               <View style={styles.matchColumn}>
-                {leftItems.map((item) => (
+                {shuffledLeftMatchItems.map((item) => (
                   <TouchableOpacity
-                    key={item}
+                    key={item.id} // Use the unique ID as key
                     style={[
                       styles.matchOption,
-                      selectedMatch === item && styles.selectedMatch,
-                      // If this item is part of a correctly matched pair (after checking)
-                      showContinueButton && ((matchedPairs[item] && currentExercise.pairs?.[item] === matchedPairs[item]) || (Object.keys(currentExercise.pairs || {}).find(k => currentExercise.pairs?.[k] === item) && matchedPairs[Object.keys(currentExercise.pairs || {}).find(k => currentExercise.pairs?.[k] === item) || ''] === item)) && styles.correctOption,
-                      showContinueButton && selectedMatch === item && !isCorrect && styles.incorrectOption // Show incorrect if selected and overall answer is wrong
+                      selectedMatch === item.id && styles.selectedMatch, // Highlight if this item is the first selection
+                      !!matchedPairs[item.id] && styles.matchedOption, // Apply matched style immediately
+                      incorrectlyMatchedPair.includes(item.id) && styles.incorrectTemporaryMatch, // Highlight if part of an incorrect temporary match
+                      // Styles after checking (showContinueButton)
+                      showContinueButton && !!matchedPairs[item.id] && (currentExercise.pairs?.[item.value] === shuffledRightMatchItems.find(rItem => rItem.id === matchedPairs[item.id])?.value ? styles.correctOption : styles.incorrectOption),
+                      showContinueButton && selectedMatch === item.id && !isCorrect && styles.incorrectOption // Show incorrect if selected and overall answer is wrong
                     ]}
                     onPress={() => handleAnswerSelect(item)}
                     activeOpacity={0.7}
-                    // Disable if already matched or currently selected as the first part of a pair
-                    disabled={showContinueButton || !!matchedPairs[item] || Object.values(matchedPairs).includes(item) || (selectedMatch !== null && selectedMatch !== item)}
+                    disabled={
+                      showContinueButton || // Disable all if feedback is showing
+                      !!matchedPairs[item.id] || // Disable if this item is already part of a matched pair
+                      (selectedMatch !== null && selectedMatch !== item.id && item.side === shuffledLeftMatchItems.find(i => i.id === selectedMatch)?.side) // Disable other items on the same side if one is selected
+                    }
                   >
-                    <Text style={styles.optionText}>{item}</Text>
-                    {matchedPairs[item] && (
+                    <Text style={styles.optionText}>{item.value}</Text>
+                    {!!matchedPairs[item.id] && ( // Show checkmark if matched
                       <Ionicons name="checkmark" size={20} color="#58CC02" style={styles.matchCheck} />
                     )}
                   </TouchableOpacity>
                 ))}
               </View>
               <View style={styles.matchColumn}>
-                {rightItems.map((item) => (
+                {shuffledRightMatchItems.map((item) => (
                   <TouchableOpacity
-                    key={item}
+                    key={item.id} // Use the unique ID as key
                     style={[
                       styles.matchOption,
-                      selectedMatch === item && styles.selectedMatch,
-                      // If this item is part of a correctly matched pair (after checking)
-                      showContinueButton && ((Object.keys(currentExercise.pairs || {}).find(k => currentExercise.pairs?.[k] === item) && matchedPairs[Object.keys(currentExercise.pairs || {}).find(k => currentExercise.pairs?.[k] === item) || ''] === item) || (matchedPairs[item] && currentExercise.pairs?.[matchedPairs[item]] === item)) && styles.correctOption,
-                      showContinueButton && selectedMatch === item && !isCorrect && styles.incorrectOption // Show incorrect if selected and overall answer is wrong
+                      selectedMatch === item.id && styles.selectedMatch, // Highlight if this item is the first selection
+                      !!matchedPairs[item.id] && styles.matchedOption, // Apply matched style immediately
+                      incorrectlyMatchedPair.includes(item.id) && styles.incorrectTemporaryMatch, // Highlight if part of an incorrect temporary match
+                      // Styles after checking (showContinueButton)
+                      showContinueButton && !!matchedPairs[item.id] && (currentExercise.pairs?.[shuffledLeftMatchItems.find(lItem => lItem.id === matchedPairs[item.id])?.value] === item.value ? styles.correctOption : styles.incorrectOption),
+                      showContinueButton && selectedMatch === item.id && !isCorrect && styles.incorrectOption // Show incorrect if selected and overall answer is wrong
                     ]}
                     onPress={() => handleAnswerSelect(item)}
                     activeOpacity={0.7}
-                    // Disable if already matched or currently selected as the first part of a pair
-                    disabled={showContinueButton || !!Object.keys(matchedPairs).find(key => matchedPairs[key] === item) || Object.keys(matchedPairs).includes(item) || (selectedMatch !== null && selectedMatch !== item)}
+                    disabled={
+                      showContinueButton || // Disable all if feedback is showing
+                      !!matchedPairs[item.id] || // Disable if this item is already part of a matched pair
+                      (selectedMatch !== null && selectedMatch !== item.id && item.side === shuffledRightMatchItems.find(i => i.id === selectedMatch)?.side) // Disable other items on the same side if one is selected
+                    }
                   >
-                    <Text style={styles.optionText}>{item}</Text>
-                    {Object.keys(matchedPairs).find(key => matchedPairs[key] === item) && (
+                    <Text style={styles.optionText}>{item.value}</Text>
+                    {!!matchedPairs[item.id] && ( // Show checkmark if matched
                       <Ionicons name="checkmark" size={20} color="#58CC02" style={styles.matchCheck} />
                     )}
                   </TouchableOpacity>
@@ -648,7 +782,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 28
   },
-  // New styles for Translation Input
   translationInput: {
     borderWidth: 2,
     borderColor: '#E5E5E5',
@@ -668,8 +801,6 @@ const styles = StyleSheet.create({
     borderColor: '#FF3B30',
     backgroundColor: '#FFEBEE',
   },
-  // End new styles for Translation Input
-
   optionsContainer: {
     marginBottom: 24
   },
@@ -681,9 +812,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent'
   },
-  // Removed wordOptionsContainer, wordCard, selectedWordCard, selectedWordsContainer
-  // as they are no longer used for translation input
-
   selectedOption: {
     backgroundColor: '#E0E0E0',
     borderColor: '#58CC02'
@@ -701,7 +829,6 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlign: 'center'
   },
-  // Renamed nextButton to actionButton and added specific styles
   actionButton: {
     position: 'absolute',
     bottom: 24,
@@ -766,17 +893,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#EDEAFD' // Light purple background
   },
   matchedOption: {
-    borderColor: '#58CC02',
-    backgroundColor: '#E8F5E9'
+    borderColor: '#58CC02', // Green border for matched items
+    backgroundColor: '#E8F5E9' // Light green background for matched items
+  },
+  incorrectTemporaryMatch: {
+    borderColor: '#FF3B30', // Red border for temporarily incorrect match
+    backgroundColor: '#FFEBEE', // Light red background
   },
   matchCheck: {
     position: 'absolute',
     right: 8
   },
-  // Removed modalContainer, modalContent, correctModal, incorrectModal
-  // as feedback is now integrated on screen
-
-  // New feedback container styles
   feedbackContainer: {
     position: 'absolute',
     bottom: 90, // Position above the action button
@@ -841,8 +968,6 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlign: 'center',
   },
-  // End new feedback container styles
-
   completionModalContainer: {
     flex: 1,
     justifyContent: 'center',
