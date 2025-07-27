@@ -8,9 +8,7 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
-  Easing,
-  Image,
-  Modal,
+  Easing, // Modal is still imported but the completion modal logic is removed
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -82,7 +80,8 @@ const LanguageLessonsPage = () => {
   // New state to temporarily store IDs of incorrectly matched items for visual feedback
   const [incorrectlyMatchedPair, setIncorrectlyMatchedPair] = useState<string[]>([]);
   const [hearts, setHearts] = useState(3);
-  const [showCompletionModal, setShowCompletionModal] = useState(false);
+  // Removed showCompletionModal as we are navigating to a new page
+  // const [showCompletionModal, setShowCompletionModal] = useState(false);
 
   // States to hold the shuffled MatchItem objects for matching exercises, ensuring stable order
   const [shuffledLeftMatchItems, setShuffledLeftMatchItems] = useState<MatchItem[]>([]);
@@ -340,11 +339,6 @@ const LanguageLessonsPage = () => {
     setSelectedMatch(null); // Clear matching selection for the next exercise
     setIncorrectlyMatchedPair([]); // Clear any incorrect highlights
 
-    if (hearts <= 0) {
-      router.push('/(root)/(tabs)/englishPages/beginner/HomepageTabs/home');
-      return;
-    }
-
     Animated.timing(progress, {
       toValue: exercises?.length
         ? ((currentExerciseIndex + 1) / exercises.length) * 100
@@ -357,7 +351,16 @@ const LanguageLessonsPage = () => {
     if (exercises && currentExerciseIndex < exercises.length - 1) {
       setCurrentExerciseIndex(currentExerciseIndex + 1);
     } else {
-      setShowCompletionModal(true);
+      // Navigate to the new LessonCompletionPage instead of showing a modal
+      router.replace({
+        pathname: '/(root)/(tabs)/englishPages/beginner/LanguageLessons/LessonCompletionPage',
+        params: {
+          xpGained: xp, // Total XP gained in this lesson
+          lessonTitle: lessonTitle,
+          totalXpPossible: lessonXpReward, // Total XP possible for the lesson
+          currentStreak: streak // Current streak
+        }
+      });
       completeLesson();
     }
   };
@@ -380,11 +383,6 @@ const LanguageLessonsPage = () => {
     } catch (error) {
       console.error('Error completing lesson:', error);
     }
-  };
-
-  const handleContinueHome = () => {
-    setShowCompletionModal(false);
-    router.push('/(root)/(tabs)/englishPages/beginner/HomepageTabs/home');
   };
 
   const renderExercise = () => {
@@ -661,49 +659,7 @@ const LanguageLessonsPage = () => {
         </TouchableOpacity>
       )}
 
-
-      <Modal visible={showCompletionModal} transparent animationType="fade">
-        <View style={styles.completionModalContainer}>
-          <View style={styles.completionModalContent}>
-            <Image
-              source={{ uri: 'https://cdn-icons-png.flaticon.com/512/3132/3132693.png' }}
-              style={styles.completionImage}
-              resizeMode="contain"
-            />
-            <Text style={styles.completionTitle}>Lesson Complete!</Text>
-            <Text style={styles.completionSubtitle}>You've mastered {(lessonTitle as string) || "this lesson"}</Text>
-
-            <View style={styles.statsContainer}>
-              <View style={styles.statItem}>
-                <FontAwesome5 name="bolt" size={24} color="#FFC800" />
-                <Text style={styles.statText}>{xp} XP Earned</Text>
-              </View>
-              <View style={styles.statItem}>
-                <FontAwesome5 name="fire" size={24} color="#FF6B00" />
-                <Text style={styles.statText}>{streak} Day Streak</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Ionicons name="trophy" size={24} color="#58CC02" />
-                <Text style={styles.statText}>
-                  {Number(
-                    Array.isArray(lessonXpReward)
-                      ? lessonXpReward[0]
-                      : lessonXpReward ?? 0
-                  ) || 0} Total XP Possible
-                </Text>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={styles.continueHomeButton}
-              onPress={handleContinueHome}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.continueHomeButtonText}>Continue</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* Removed the Modal component from here as it's replaced by LessonCompletionPage */}
 
       {streak > 0 && (
         <View style={styles.streakContainer}>
