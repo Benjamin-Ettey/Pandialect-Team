@@ -1,20 +1,35 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  Image,
-  Modal,
-  Alert,
-  Platform,
-  useWindowDimensions
-} from 'react-native';
-import { Ionicons, MaterialCommunityIcons, Feather, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View
+} from 'react-native';
+
+
+async function handleLogout() {
+  try {
+    // Clear user data from AsyncStorage
+    await AsyncStorage.removeItem('accessToken');
+    await AsyncStorage.removeItem('refreshToken');
+
+    // Redirect to login page
+    router.replace('/(root)/(tabs)/loginPage/login');
+  } catch (error) {
+    console.error('Failed to logout:', error);
+    Alert.alert('Error', 'Failed to logout. Please try again.');
+  }
+}
 
 const AccountSettings = () => {
   const { width } = useWindowDimensions();
@@ -430,7 +445,7 @@ const AccountSettings = () => {
                 style={[styles.modalButton, styles.deleteConfirmButton]}
                 onPress={() => {
                   setLogoutModalVisible(false);
-                  router.replace('/(root)/(tabs)/loginPage/login'); // Or your login route
+                  handleLogout();
                 }}
               >
                 <Text style={styles.deleteConfirmButtonText}>Logout</Text>
