@@ -8,7 +8,7 @@ async function getRedirectPath(): Promise<string> {
   if (accessToken && refreshToken) {
     return "/(root)/(tabs)/englishPages/beginner/HomepageTabs/home";
   }
-  return "/(root)/(tabs)/loginPage/login";
+  return "/(root)/(tabs)/(auth)/landingPage";
 }
 
 export default function Index() {

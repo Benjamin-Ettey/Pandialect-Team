@@ -8,7 +8,8 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
-  Easing, // Modal is still imported but the completion modal logic is removed
+  Easing,
+  Modal, // Modal is used for the hearts exhausted message
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -80,8 +81,7 @@ const LanguageLessonsPage = () => {
   // New state to temporarily store IDs of incorrectly matched items for visual feedback
   const [incorrectlyMatchedPair, setIncorrectlyMatchedPair] = useState<string[]>([]);
   const [hearts, setHearts] = useState(3);
-  // Removed showCompletionModal as we are navigating to a new page
-  // const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [showHeartsExhaustedModal, setShowHeartsExhaustedModal] = useState(false); // New state for hearts modal
 
   // States to hold the shuffled MatchItem objects for matching exercises, ensuring stable order
   const [shuffledLeftMatchItems, setShuffledLeftMatchItems] = useState<MatchItem[]>([]);
@@ -163,6 +163,7 @@ const LanguageLessonsPage = () => {
     setSelectedMatch(null);
     setIncorrectlyMatchedPair([]);
     setHearts(3); // Reset hearts for a new lesson start
+    setShowHeartsExhaustedModal(false); // Ensure modal is hidden on new lesson load
     // --- End Aggressive State Reset ---
 
     const fetchExercisesForLesson = async () => {
@@ -229,24 +230,20 @@ const LanguageLessonsPage = () => {
 
     if (currentExercise.type === 'matching') {
       if (!selectedMatch) {
-        // First selection: store the ID of the selected item
         setSelectedMatch(item.id);
       } else {
-        // Second selection: attempt to match
         const firstSelectedItem = [...shuffledLeftMatchItems, ...shuffledRightMatchItems].find(
           (matchItem) => matchItem.id === selectedMatch
         );
         const secondSelectedItem = item;
 
-        // Prevent matching an item with itself or an item from the same side
         if (!firstSelectedItem || firstSelectedItem.id === secondSelectedItem.id || firstSelectedItem.side === secondSelectedItem.side) {
-          setSelectedMatch(null); // Reset selection if invalid
+          setSelectedMatch(null);
           return;
         }
 
         let isMatch = false;
 
-        // Determine if the selected pair forms a correct match based on original pairs
         if (firstSelectedItem.side === 'left' && secondSelectedItem.side === 'right') {
           if (currentExercise.pairs?.[firstSelectedItem.value] === secondSelectedItem.value) {
             isMatch = true;
@@ -261,20 +258,29 @@ const LanguageLessonsPage = () => {
           setMatchedPairs(prev => ({
             ...prev,
             [firstSelectedItem.id]: secondSelectedItem.id,
-            [secondSelectedItem.id]: firstSelectedItem.id // Store both directions for easier lookup and styling
+            [secondSelectedItem.id]: firstSelectedItem.id
           }));
         } else {
-          setHearts(prev => Math.max(prev - 1, 0));
-          // Highlight the incorrectly matched pair temporarily
+          // Decrement hearts and check if hearts reach 0
+          setHearts(prev => {
+            const newHearts = Math.max(prev - 1, 0);
+            if (newHearts === 0) {
+              setShowHeartsExhaustedModal(true);
+              setFeedbackMessage(null);
+              setShowCheckButton(false);
+              setShowContinueButton(false);
+            }
+            return newHearts;
+          });
           setIncorrectlyMatchedPair([firstSelectedItem.id, secondSelectedItem.id]);
           setTimeout(() => {
-            setIncorrectlyMatchedPair([]); // Clear highlight after a short delay
-          }, 700); // Highlight for 700ms
+            setIncorrectlyMatchedPair([]);
+          }, 700);
         }
-        setSelectedMatch(null); // Clear selectedMatch after attempting a pair
+        setSelectedMatch(null);
       }
     } else if (currentExercise.type === 'multiple_choice') {
-      setSelectedAnswer(item.value); // For MC, item.value is the answer string
+      setSelectedAnswer(item.value);
     }
     // Translation input handled by TextInput onChangeText
   };
@@ -317,16 +323,32 @@ const LanguageLessonsPage = () => {
       submittedAnswer = JSON.stringify(matchedPairs); // For debugging/logging
     }
 
-    setIsCorrect(correct);
-    setFeedbackMessage(correct ? 'Correct!' : 'Incorrect.');
-    setShowContinueButton(true); // Show continue button after checking
-
     if (correct) {
+      setIsCorrect(true);
+      setFeedbackMessage('Correct!');
       setXp(prev => prev + (currentExercise.xpReward || 0));
       setStreak(prev => prev + 1);
+      setShowContinueButton(true);
     } else {
-      setStreak(0);
-      setHearts(prev => Math.max(prev - currentExercise.heartsCost, 0));
+      // Calculate new hearts BEFORE setting state, to check if it hits zero
+      const newHeartsAfterCost = Math.max(hearts - currentExercise.heartsCost, 0);
+
+      if (newHeartsAfterCost === 0) {
+        // Hearts are exhausted, show modal immediately
+        setHearts(newHeartsAfterCost); // Update hearts state
+        setShowHeartsExhaustedModal(true);
+        // Clear any exercise-specific feedback and buttons
+        setFeedbackMessage(null); // Clear feedback message
+        setShowCheckButton(false); // Hide check button
+        setShowContinueButton(false); // Hide continue button
+      } else {
+        // Hearts are not exhausted, proceed with regular incorrect feedback
+        setIsCorrect(false);
+        setFeedbackMessage('Incorrect.');
+        setHearts(newHeartsAfterCost); // Update hearts state
+        setStreak(0);
+        setShowContinueButton(true);
+      }
     }
   };
 
@@ -338,6 +360,12 @@ const LanguageLessonsPage = () => {
     setMatchedPairs({}); // Clear matching pairs for the next exercise
     setSelectedMatch(null); // Clear matching selection for the next exercise
     setIncorrectlyMatchedPair([]); // Clear any incorrect highlights
+
+    // If hearts are 0, the modal should handle navigation, so prevent further exercise progression
+    if (hearts <= 0) {
+      // The modal will handle navigation to home
+      return;
+    }
 
     Animated.timing(progress, {
       toValue: exercises?.length
@@ -353,7 +381,7 @@ const LanguageLessonsPage = () => {
     } else {
       // Navigate to the new LessonCompletionPage instead of showing a modal
       router.replace({
-        pathname: '/(root)/(tabs)/englishPages/beginner/LanguageLessons/LessonCompletionPage',
+        pathname: '/(root)/(tabs)/englishPages/beginner/LessonCompletionPage',
         params: {
           xpGained: xp, // Total XP gained in this lesson
           lessonTitle: lessonTitle,
@@ -383,6 +411,11 @@ const LanguageLessonsPage = () => {
     } catch (error) {
       console.error('Error completing lesson:', error);
     }
+  };
+
+  const handleHeartsExhaustedAndGoHome = () => {
+    setShowHeartsExhaustedModal(false);
+    router.replace('/(root)/(tabs)/englishPages/beginner/HomepageTabs/home');
   };
 
   const renderExercise = () => {
@@ -652,6 +685,7 @@ const LanguageLessonsPage = () => {
           style={[styles.actionButton, isCorrect ? styles.correctActionButton : styles.incorrectActionButton]}
           onPress={continueToNextExercise}
           activeOpacity={0.8}
+          disabled={showHeartsExhaustedModal} // Disable continue if hearts modal is showing
         >
           <Text style={styles.actionButtonText}>
             {hearts <= 0 ? 'End Lesson' : (currentExerciseIndex < exercises.length - 1 ? 'Continue' : 'Finish Lesson')}
@@ -659,7 +693,30 @@ const LanguageLessonsPage = () => {
         </TouchableOpacity>
       )}
 
-      {/* Removed the Modal component from here as it's replaced by LessonCompletionPage */}
+      {/* Hearts Exhausted Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showHeartsExhaustedModal}
+        onRequestClose={() => { }} // Handle Android back button
+      >
+        <View style={styles.heartsExhaustedModalContainer}>
+          <View style={styles.heartsExhaustedModalContent}>
+            <Ionicons name="heart-dislike-outline" size={60} color="#FF3B30" style={styles.heartsExhaustedIcon} />
+            <Text style={styles.heartsExhaustedTitle}>Out of Hearts!</Text>
+            <Text style={styles.heartsExhaustedMessage}>
+              You've run out of hearts for this lesson. Don't worry, you can try again later!
+            </Text>
+            <TouchableOpacity
+              style={styles.heartsExhaustedButton}
+              onPress={handleHeartsExhaustedAndGoHome}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.heartsExhaustedButtonText}>Go to Home</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {streak > 0 && (
         <View style={styles.streakContainer}>
@@ -924,71 +981,6 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlign: 'center',
   },
-  completionModalContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.7)'
-  },
-  completionModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 32,
-    width: '90%',
-    maxHeight: '90%',
-    alignItems: 'center'
-  },
-  completionImage: {
-    width: 120,
-    height: 120,
-    marginBottom: 20
-  },
-  completionTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#58CC02',
-    marginBottom: 8,
-    textAlign: 'center'
-  },
-  completionSubtitle: {
-    fontSize: 18,
-    color: '#666',
-    marginBottom: 24,
-    textAlign: 'center'
-  },
-  statsContainer: {
-    width: '100%',
-    marginVertical: 20
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
-    marginBottom: 12
-  },
-  statText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginLeft: 12
-  },
-  continueHomeButton: {
-    backgroundColor: '#58CC02',
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    width: '100%',
-    alignItems: 'center',
-    marginTop: 16
-  },
-  continueHomeButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold'
-  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1024,7 +1016,56 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold'
-  }
+  },
+  // New styles for Hearts Exhausted Modal
+  heartsExhaustedModalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+  },
+  heartsExhaustedModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 30,
+    width: '85%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 10,
+  },
+  heartsExhaustedIcon: {
+    marginBottom: 20,
+  },
+  heartsExhaustedTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#FF3B30',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  heartsExhaustedMessage: {
+    fontSize: 18,
+    color: '#666',
+    marginBottom: 30,
+    textAlign: 'center',
+    lineHeight: 25,
+  },
+  heartsExhaustedButton: {
+    backgroundColor: '#FF3B30', // Red button
+    borderRadius: 12,
+    paddingVertical: 15,
+    paddingHorizontal: 25,
+    width: '100%',
+    alignItems: 'center',
+  },
+  heartsExhaustedButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
 });
 
 export default LanguageLessonsPage;

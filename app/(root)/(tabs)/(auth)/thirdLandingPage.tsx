@@ -17,11 +17,7 @@ const LANGUAGES = [
   { name: 'Spanish', flag: '🇪🇸', code: 'es' },
   { name: 'French', flag: '🇫🇷', code: 'fr' },
   { name: 'German', flag: '🇩🇪', code: 'de' },
-  { name: 'Italian', flag: '🇮🇹', code: 'it' },
-  { name: 'Chinese', flag: '🇨🇳', code: 'zh' },
   { name: 'Japanese', flag: '🇯🇵', code: 'ja' },
-  { name: 'Portuguese', flag: '🇵🇹', code: 'pt' },
-  { name: 'Russian', flag: '🇷🇺', code: 'ru' },
 ];
 
 const LanguageSelectionScreen = () => {
