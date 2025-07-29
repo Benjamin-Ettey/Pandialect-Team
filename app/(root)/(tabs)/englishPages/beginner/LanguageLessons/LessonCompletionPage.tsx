@@ -10,26 +10,23 @@ import {
     SafeAreaView,
     StyleSheet,
     Text,
-    TouchableOpacity,
-    View
+    Pressable,
+    View,
+    Platform,
 } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
+const scaleWidth = (size: number) => (width / 375) * size;
+const scaleHeight = (size: number) => (height / 667) * size;
 
 const LessonCompletionPage = () => {
     const router = useRouter();
     const params = useLocalSearchParams();
-    // Extract parameters passed from LanguageLessonsPage
-    const { xpGained, lessonTitle } = params; // Removed totalXpPossible and currentStreak as they won't be displayed directly
+    const { xpGained, lessonTitle } = params;
 
-    // State for animated XP and total XP
-    const [animatedXpGained] = useState(new Animated.Value(0));
-    const [displayXpGained, setDisplayXpGained] = useState(0);
     const [animatedTotalXp] = useState(new Animated.Value(0));
     const [displayTotalXp, setDisplayTotalXp] = useState(0);
-    // currentTotalXp and currentFireStreak are still fetched to get the initial total XP for animation
     const [currentTotalXp, setCurrentTotalXp] = useState(0);
-
     const parsedXpGained = Number(xpGained || 0);
 
     useEffect(() => {
@@ -37,43 +34,26 @@ const LessonCompletionPage = () => {
             try {
                 const userId = await AsyncStorage.getItem('userId');
                 const accessToken = await AsyncStorage.getItem('accessToken');
-                if (!userId || !accessToken) {
-                    console.error('User ID or Access Token not found.');
-                    return;
-                }
+                if (!userId || !accessToken) return;
 
-                // Fetch current user XP from backend
                 const url = `${BASE_API_URL}/api/user/languages?userId=${userId}`;
                 const response = await apiFetch(url, {
                     method: 'GET',
-                    headers: { Authorization: `Bearer ${accessToken}` }
+                    headers: { Authorization: `Bearer ${accessToken}` },
                 });
 
                 if (response.ok) {
                     const data = await response.json();
                     const initialTotalXp = data.totalXp || 0;
-                    setCurrentTotalXp(initialTotalXp); // Set actual current total XP
+                    setCurrentTotalXp(initialTotalXp);
 
-                    // Animate XP gained
-                    animatedXpGained.setValue(0);
-                    Animated.timing(animatedXpGained, {
-                        toValue: parsedXpGained,
-                        duration: 1500,
-                        easing: Easing.out(Easing.ease),
+                    animatedTotalXp.setValue(initialTotalXp);
+                    Animated.timing(animatedTotalXp, {
+                        toValue: initialTotalXp + parsedXpGained,
+                        duration: 1800,
+                        easing: Easing.out(Easing.exp),
                         useNativeDriver: false,
-                    }).start(() => {
-                        // After XP gained animation, animate total XP
-                        // Start total XP animation from the value *before* adding the new XP gained
-                        animatedTotalXp.setValue(initialTotalXp - parsedXpGained);
-                        Animated.timing(animatedTotalXp, {
-                            toValue: initialTotalXp, // Animate to the new total XP
-                            duration: 1000,
-                            easing: Easing.out(Easing.ease),
-                            useNativeDriver: false,
-                        }).start();
-                    });
-                } else {
-                    console.error('Failed to fetch user stats:', response.status);
+                    }).start();
                 }
             } catch (error) {
                 console.error('Error fetching user stats:', error);
@@ -82,21 +62,14 @@ const LessonCompletionPage = () => {
 
         fetchUserStats();
 
-        // Listener for XP gained animation
-        animatedXpGained.addListener(({ value }) => {
-            setDisplayXpGained(Math.floor(value));
-        });
-
-        // Listener for total XP animation
         animatedTotalXp.addListener(({ value }) => {
             setDisplayTotalXp(Math.floor(value));
         });
 
         return () => {
-            animatedXpGained.removeAllListeners();
             animatedTotalXp.removeAllListeners();
         };
-    }, [xpGained, animatedXpGained, animatedTotalXp]); // Re-run effect if xpGained changes (for new lessons)
+    }, [xpGained]);
 
     const handleContinueHome = () => {
         router.replace('/(root)/(tabs)/englishPages/beginner/HomepageTabs/home');
@@ -105,30 +78,26 @@ const LessonCompletionPage = () => {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.content}>
-                <Text style={styles.lessonTitle}>Lesson Complete!</Text>
-                <Text style={styles.lessonSubtitle}>You've mastered {lessonTitle || "this lesson"}!</Text>
+                <Text style={styles.title}>🎉 Lesson Complete</Text>
+                <Text style={styles.subtitle}>{lessonTitle || 'Well done!'}</Text>
 
-                <View style={styles.xpGainedSection}>
-                    <Text style={styles.xpGainedLabel}>XP Gained</Text>
-                    <Text style={styles.xpGainedValue}>
-                        + <Animated.Text>{displayXpGained}</Animated.Text> XP
+                <View style={styles.card}>
+                    <Text style={styles.cardLabel}>Total XP</Text>
+                    <Text style={styles.cardXP}>
+                        <Animated.Text>{displayTotalXp}</Animated.Text>
                     </Text>
+                    <Text style={styles.xpGained}>+{parsedXpGained} XP</Text>
                 </View>
 
-                <View style={styles.totalXpSection}>
-                    <Text style={styles.totalXpLabel}>Your New Total XP</Text>
-                    <Text style={styles.totalXpValue}>
-                        <Animated.Text>{displayTotalXp}</Animated.Text> XP
-                    </Text>
-                </View>
-
-                <TouchableOpacity
-                    style={styles.continueButton}
+                <Pressable
+                    style={({ pressed }) => [
+                        styles.button,
+                        pressed && { transform: [{ scale: 0.97 }] },
+                    ]}
                     onPress={handleContinueHome}
-                    activeOpacity={0.8}
                 >
-                    <Text style={styles.continueButtonText}>Continue</Text>
-                </TouchableOpacity>
+                    <Text style={styles.buttonText}>Continue</Text>
+                </Pressable>
             </View>
         </SafeAreaView>
     );
@@ -137,95 +106,74 @@ const LessonCompletionPage = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#edeafd', // Light purple background
+        backgroundColor: '#f6f7fb',
     },
     content: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        paddingHorizontal: width * 0.05, // Responsive horizontal padding
-        paddingVertical: height * 0.05, // Responsive vertical padding
+        padding: scaleWidth(24),
     },
-    lessonTitle: {
-        fontSize: width * 0.08, // Responsive font size
-        fontWeight: 'bold',
-        color: '#58CC02', // Green for success
-        marginBottom: height * 0.01,
-        textAlign: 'center',
-    },
-    lessonSubtitle: {
-        fontSize: width * 0.05, // Responsive font size
-        color: '#666',
-        marginBottom: height * 0.05,
-        textAlign: 'center',
-    },
-    xpGainedSection: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 20,
-        padding: width * 0.08, // Responsive padding
-        alignItems: 'center',
-        marginBottom: height * 0.03,
-        width: '90%', // Responsive width
-        maxWidth: 400, // Max width for larger screens
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.15,
-        shadowRadius: 10,
-        elevation: 12,
-    },
-    xpGainedLabel: {
-        fontSize: width * 0.055, // Responsive font size
-        fontWeight: '600',
+    title: {
+        fontSize: scaleWidth(28),
+        fontWeight: '700',
         color: '#333',
-        marginBottom: height * 0.01,
+        marginBottom: scaleHeight(8),
+        textAlign: 'center',
     },
-    xpGainedValue: {
-        fontSize: width * 0.12, // Very large for prominence
-        fontWeight: 'bold',
-        color: '#FFC800', // Gold for XP
+    subtitle: {
+        fontSize: scaleWidth(16),
+        color: '#555',
+        marginBottom: scaleHeight(32),
+        textAlign: 'center',
     },
-    totalXpSection: {
-        backgroundColor: '#FFFFFF',
+    card: {
+        backgroundColor: '#fff',
         borderRadius: 20,
-        padding: width * 0.08, // Responsive padding
+        paddingVertical: scaleHeight(28),
+        paddingHorizontal: scaleWidth(32),
         alignItems: 'center',
-        marginBottom: height * 0.05,
-        width: '90%', // Responsive width
-        maxWidth: 400, // Max width for larger screens
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.15,
-        shadowRadius: 10,
-        elevation: 12,
-    },
-    totalXpLabel: {
-        fontSize: width * 0.055, // Responsive font size
-        color: '#666',
-        marginBottom: height * 0.01,
-    },
-    totalXpValue: {
-        fontSize: width * 0.1, // Large for prominence
-        fontWeight: 'bold',
-        color: '#7F5AED', // Purple for total XP
-    },
-    continueButton: {
-        backgroundColor: '#7F5AED', // Purple button
-        borderRadius: 12,
-        paddingVertical: height * 0.025, // Responsive padding
-        paddingHorizontal: width * 0.08, // Responsive padding
-        width: '80%', // Responsive width
-        maxWidth: 300, // Max width for larger screens
-        alignItems: 'center',
+        width: '85%',
+        marginBottom: scaleHeight(40),
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 5,
-        elevation: 10,
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+        elevation: 6,
     },
-    continueButtonText: {
-        color: '#FFFFFF',
-        fontSize: width * 0.055, // Responsive font size
-        fontWeight: 'bold',
+    cardLabel: {
+        fontSize: scaleWidth(16),
+        color: '#666',
+        marginBottom: 8,
+        fontWeight: '500',
+    },
+    cardXP: {
+        fontSize: scaleWidth(64),
+        fontWeight: '700',
+        color: '#333',
+    },
+    xpGained: {
+        fontSize: scaleWidth(18),
+        color: '#2ecc71',
+        fontWeight: '600',
+        marginTop: 6,
+    },
+    button: {
+        backgroundColor: '#7f6edb',
+        paddingVertical: scaleHeight(14),
+        paddingHorizontal: scaleWidth(40),
+        borderRadius: 30,
+        shadowColor: '#7f6edb',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    buttonText: {
+        color: '#fff',
+        fontSize: scaleWidth(16),
+        fontWeight: '600',
+        textAlign: 'center',
     },
 });
 
