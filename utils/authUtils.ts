@@ -21,7 +21,7 @@ export async function apiFetch(url: string, options: RequestInit = {}, retry = t
     if (refreshRes.ok) {
       const data = await refreshRes.json();
       await AsyncStorage.setItem('accessToken', data.accessToken);
-        await AsyncStorage.setItem('refreshToken', data.refreshToken);
+      await AsyncStorage.setItem('refreshToken', data.refreshToken);
       // Retry original request with new token
       return apiFetch(url, options, false);
     }

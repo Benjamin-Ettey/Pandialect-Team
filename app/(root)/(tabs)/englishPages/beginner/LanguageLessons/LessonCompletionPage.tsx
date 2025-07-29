@@ -115,7 +115,7 @@ const LessonCompletionPage = () => {
 
             const url = `${BASE_API_URL}/api/user/xp?userId=${userId}&xp=${xp}`;
             const response = await apiFetch(url, {
-                method: 'POST',
+                method: 'PATCH',
                 headers: { Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({ userId, xp })
             });
