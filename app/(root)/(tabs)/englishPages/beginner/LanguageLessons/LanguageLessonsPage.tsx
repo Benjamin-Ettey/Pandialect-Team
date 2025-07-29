@@ -381,7 +381,7 @@ const LanguageLessonsPage = () => {
     } else {
       // Navigate to the new LessonCompletionPage instead of showing a modal
       router.replace({
-        pathname: '/(root)/(tabs)/englishPages/beginner/LessonCompletionPage',
+        pathname: '/(root)/(tabs)/englishPages/beginner/LanguageLessons/LessonCompletionPage',
         params: {
           xpGained: xp, // Total XP gained in this lesson
           lessonTitle: lessonTitle,

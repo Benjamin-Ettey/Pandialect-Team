@@ -98,9 +98,35 @@ const LessonCompletionPage = () => {
         };
     }, [xpGained, animatedXpGained, animatedTotalXp]); // Re-run effect if xpGained changes (for new lessons)
 
+
     const handleContinueHome = () => {
+        updateXp(parsedXpGained); // Update XP in backend
         router.replace('/(root)/(tabs)/englishPages/beginner/HomepageTabs/home');
     };
+
+    async function updateXp(xp: number) {
+        try {
+            const userId = await AsyncStorage.getItem('userId');
+            const accessToken = await AsyncStorage.getItem('accessToken');
+            if (!userId || !accessToken) {
+                console.error('User ID or Access Token not found.');
+                return;
+            }
+
+            const url = `${BASE_API_URL}/api/user/xp?userId=${userId}&xp=${xp}`;
+            const response = await apiFetch(url, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({ userId, xp })
+            });
+
+            if (!response.ok) {
+                console.error('Failed to update XP:', response.status);
+            }
+        } catch (error) {
+            console.error('Error updating XP:', error);
+        }
+    }
 
     return (
         <SafeAreaView style={styles.container}>
