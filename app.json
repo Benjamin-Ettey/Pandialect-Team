@@ -16,7 +16,8 @@
         "foregroundImage": "./assets/images/PandialectLogo.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.app.pandialect"
     },
     "web": {
       "bundler": "metro",
@@ -38,6 +39,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6a73ed02-6f40-40ad-ac9d-cc3885f428a0"
+      }
     }
   }
 }
